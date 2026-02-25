@@ -25,6 +25,8 @@ jobs:
             # Sync OpenClaw prompt files and skills
             OPENCLAW_WS=${{ secrets.OPENCLAW_WORKSPACE }}
             cp openclaw/prompt/*.md "$OPENCLAW_WS/"
-            mkdir -p "$OPENCLAW_WS/skills/finance-api"
+            mkdir -p "$OPENCLAW_WS/skills/finance-api/tools"
             cp openclaw/skills/finance-api/SKILL.md "$OPENCLAW_WS/skills/finance-api/"
-            cp -r openclaw/skills/finance-api/tools "$OPENCLAW_WS/skills/finance-api/"
+            cp openclaw/skills/finance-api/api.sh "$OPENCLAW_WS/skills/finance-api/"
+            chmod +x "$OPENCLAW_WS/skills/finance-api/api.sh"
+            cp openclaw/skills/finance-api/tools/*.json "$OPENCLAW_WS/skills/finance-api/tools/"
