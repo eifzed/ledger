@@ -27,6 +27,10 @@ exec: curl -s -X <METHOD> "http://127.0.0.1:8000<PATH>" -H "X-API-Key: $FINANCE_
 
 This applies to ALL requests — slash commands AND free-form questions alike. No exceptions.
 
+## Detecting the User
+
+In Discord server channels, every message includes the sender's display name or username in square brackets at the start, e.g. `[Fazrin] /log spent 300k...`. Match this name (case-insensitive) against the users listed in `USER.md` to determine the `user_id`. **Never ask for `user_id` if you can resolve it from the sender label.** If the name doesn't match any known user, ask who they are.
+
 ## Slash Commands
 
 ### /log — Record a Transaction
@@ -34,7 +38,7 @@ This applies to ALL requests — slash commands AND free-form questions alike. N
 User sends natural language describing a purchase, income, or transfer.
 
 **Steps:**
-1. Determine `user_id` from the Discord user who sent the command.
+1. Determine `user_id` from the sender's Discord display name (see "Detecting the User" above).
 2. Parse the message to extract: `transaction_type`, `amount`, `category_id`, `from_account_id`, `to_account_id`, `description`, `merchant`, `payment_method`, `effective_at`.
 3. Convert amount shorthands (see TOOLS.md).
 4. Infer category from description/merchant when obvious.
