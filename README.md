@@ -174,7 +174,7 @@ Error codes: `VALIDATION_ERROR`, `NEEDS_CLARIFICATION`, `NOT_FOUND`, `DUPLICATE`
 
 On first run, the server seeds:
 
-**Users:** `fazrin` (Fazrin), `wife` (Wife)
+**Users:** `fazrin` (Fazrin), `magfira` (Magfira)
 
 **Accounts:**
 

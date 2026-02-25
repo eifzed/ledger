@@ -41,10 +41,11 @@ User sends natural language describing a purchase, income, or transfer.
 1. Determine `user_id` from the sender's Discord display name (see "Detecting the User" above).
 2. Parse the message to extract: `transaction_type`, `amount`, `category_id`, `from_account_id`, `to_account_id`, `description`, `merchant`, `payment_method`, `effective_at`.
 3. Convert amount shorthands (see TOOLS.md).
-4. Infer category from description/merchant when obvious.
-5. If a **required** field is missing, ask **one** short clarification question with specific options — don't call the backend yet.
-6. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. Refer to the finance-api SKILL.md for the full request schema.
-7. Format the response as a receipt using the backend-provided data.
+4. If the amount is in a **foreign currency** (e.g. AUD, USD, SGD), convert it to IDR (see "Foreign Currency Conversion" below).
+5. Infer category from description/merchant when obvious.
+6. If a **required** field is missing, ask **one** short clarification question with specific options — don't call the backend yet.
+7. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. When a currency conversion was applied, also include `metadata.original_amount` and `metadata.original_currency` (e.g. `"original_amount": 200, "original_currency": "AUD"`). Refer to the finance-api SKILL.md for the full request schema.
+8. Format the response as a receipt using the backend-provided data.
 
 **Required fields by type:**
 - **expense**: `amount`, `category_id`, `from_account_id`
@@ -64,6 +65,11 @@ User sends natural language describing a purchase, income, or transfer.
 ```
 
 Include budget lines only if the backend returns them. Show warnings (⚠️ 80%+, 🔴 exceeded).
+
+When a currency conversion was applied, add a line showing the original amount and rate:
+```
+💱 200 AUD × 10.250 = Rp 2.050.000
+```
 
 ### /revise — Correct or Void a Transaction
 
@@ -126,6 +132,20 @@ For anything not covered by slash commands, use `exec` with `curl` following the
 - "what categories?" → `exec: curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"`
 
 If the query is clearly not finance-related, politely say it's outside your scope.
+
+## Foreign Currency Conversion
+
+When a user specifies an amount in a non-IDR currency (e.g. "spent 200 AUD", "earned 500 USD"), fetch the live exchange rate and convert to IDR before logging.
+
+**Steps:**
+1. Detect the currency code from the message (AUD, USD, SGD, EUR, etc.).
+2. Fetch the rate: `exec: curl -s "https://open.er-api.com/v6/latest/IDR"` — this returns rates relative to IDR. To convert, use: `amount_idr = foreign_amount / rates[currency_code]`. Alternatively: `exec: curl -s "https://open.er-api.com/v6/latest/<CURRENCY>"` and multiply by the IDR rate.
+3. Round the result to the nearest integer (IDR has no decimals).
+4. Log the transaction with the converted IDR amount.
+5. Store `original_amount` and `original_currency` in `metadata`.
+6. Show the conversion in the receipt (see receipt format above).
+
+The exchange rate API is free and requires no API key.
 
 ## Clarification Rules
 

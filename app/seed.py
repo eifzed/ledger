@@ -90,7 +90,7 @@ def seed_defaults(db: Session) -> None:
 def _seed_users(db: Session) -> None:
     defaults = [
         ("fazrin", "Fazrin"),
-        ("wife", "Wife"),
+        ("magfira", "Magfira"),
     ]
     for uid, name in defaults:
         if not db.query(User).filter(User.id == uid).first():

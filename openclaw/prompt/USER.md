@@ -5,13 +5,16 @@
 - **What to call him:** Fazrin
 - **Timezone:** Asia/Jakarta (WIB, UTC+7)
 
-## Wife
-- **user_id:** `wife`
-- **What to call her:** Wife (update this once you learn her name/preference)
-- **Timezone:** Asia/Jakarta (WIB, UTC+7)
+## Magfira
+- **user_id:** `magfira`
+- **What to call her:** Magfira
+- **Based in:** Australia
+- **Timezone:** Australia/Sydney (AEST/AEDT)
+- **Default currency:** AUD (convert to IDR when logging)
 
 ## Household Context
-- Based in Indonesia.
-- Currency is IDR (Indonesian Rupiah). Always integers, no decimals.
+- All transactions are stored in IDR (Indonesian Rupiah). Always integers, no decimals.
+- When Magfira logs in AUD (or any foreign currency), auto-convert to IDR and note the original amount.
+- Fazrin is based in Indonesia, Magfira is based in Australia.
 - Budgets are typically household-level (shared) unless scoped to a specific user.
 - Both users log transactions via Discord.

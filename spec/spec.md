@@ -51,7 +51,7 @@ Dashboard is served by the Python Finance API.
 
 ### 3.1 Core Concepts
 
-- **User**: “me” and “wife” (2 participants). Identified by `user_id` and `display_name`.
+- **User**: “fazrin” and magfira (2 participants). Identified by `user_id` and `display_name`.
 - **Account**: Cash, BCA, Jago, etc. Holds a computed balance.
 - **Transaction**: Atomic record of money movement (expense, income, transfer).
 - **Budget**: Monthly caps per category (optionally per user).
