@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set active_page = "accounts" %}
+{% block title %}Ledger — Accounts{% endblock %}
+
+{% block content %}
+<h1>Accounts</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Account</th>
+      <th>Type</th>
+      <th>Currency</th>
+      <th>Balance</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in accts %}
+    <tr>
+      <td><strong>{{ a.display_name }}</strong> <span style="color:var(--text2);font-size:0.8em">({{ a.id }})</span></td>
+      <td>{{ a.type }}</td>
+      <td>{{ a.currency }}</td>
+      <td class="amount {% if balance_map.get(a.id, 0) >= 0 %}positive{% else %}negative{% endif %}" style="font-size:1.1em">
+        {{ idr(balance_map.get(a.id, 0)) }}
+      </td>
+    </tr>
+    {% endfor %}
+    {% if not accts %}
+    <tr><td colspan="4" style="text-align:center;color:var(--text2);padding:2rem">No accounts yet.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+{% set total = balance_map.values()|sum %}
+<div class="cards" style="margin-top:1.5rem">
+  <div class="card">
+    <div class="label">Total Net Worth</div>
+    <div class="value {% if total >= 0 %}positive{% else %}negative{% endif %}">{{ idr(total) }}</div>
+  </div>
+</div>
+{% endblock %}

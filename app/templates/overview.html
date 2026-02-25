@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set active_page = "overview" %}
+{% block title %}Ledger — Overview{% endblock %}
+
+{% block content %}
+<h1>{{ month }} Overview</h1>
+
+{% if summary.warnings %}
+<div class="warnings">
+  {% for w in summary.warnings %}
+  <div class="warning-item {{ w.severity.value }}">{{ w.message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Total Expenses</div>
+    <div class="value negative">{{ idr(summary.total_expenses) }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Total Income</div>
+    <div class="value positive">{{ idr(summary.total_income) }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Net</div>
+    <div class="value {% if summary.net >= 0 %}positive{% else %}negative{% endif %}">{{ idr(summary.net) }}</div>
+  </div>
+</div>
+
+<h2>Account Balances</h2>
+<div class="cards">
+  {% for b in balances %}
+  <div class="card">
+    <div class="label">{{ b.display_name }}</div>
+    <div class="value {% if b.balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(b.balance) }}</div>
+  </div>
+  {% endfor %}
+  {% if not balances %}
+  <div class="card"><div class="label">No accounts yet</div></div>
+  {% endif %}
+</div>
+
+{% if summary.budget_status %}
+<h2>Budget Status</h2>
+<table>
+  <thead><tr><th>Category</th><th>Limit</th><th>Used</th><th>Remaining</th><th>Progress</th></tr></thead>
+  <tbody>
+    {% for b in summary.budget_status %}
+    <tr>
+      <td>{{ b.category_name }}</td>
+      <td class="amount">{{ idr(b.limit) }}</td>
+      <td class="amount">{{ idr(b.used) }}</td>
+      <td class="amount {% if b.remaining < 0 %}type-expense{% endif %}">{{ idr(b.remaining) }}</td>
+      <td style="min-width:120px">
+        {% set pct = (b.percent * 100)|round|int %}
+        {% set cls = "pct-ok" if pct < 80 else ("pct-warn" if pct < 100 else "pct-over") %}
+        <div class="progress-wrap">
+          <div class="progress-bar {{ cls }}" style="width:{{ [pct, 100]|min }}%"></div>
+        </div>
+        <span style="font-size:0.75rem;color:var(--text2)">{{ pct }}%</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if summary.by_parent_category %}
+<h2 style="margin-top:2rem">Spending by Category</h2>
+<table>
+  <thead><tr><th>Category</th><th>Amount</th></tr></thead>
+  <tbody>
+    {% for p in summary.by_parent_category %}
+    <tr style="background:var(--surface2)">
+      <td><strong>{{ p.category_name }}</strong></td>
+      <td class="amount type-expense"><strong>{{ idr(p.total) }}</strong></td>
+    </tr>
+    {% for c in p.children %}
+    <tr>
+      <td style="padding-left:2rem;color:var(--text2)">{{ c.category_name }}</td>
+      <td class="amount type-expense" style="color:var(--text2)">{{ idr(c.total) }}</td>
+    </tr>
+    {% endfor %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if summary.by_user %}
+<h2 style="margin-top:2rem">Spending by User</h2>
+<table>
+  <thead><tr><th>User</th><th>Amount</th></tr></thead>
+  <tbody>
+    {% for u in summary.by_user %}
+    <tr>
+      <td>{{ u.display_name }}</td>
+      <td class="amount type-expense">{{ idr(u.total) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set active_page = "budgets" %}
+{% block title %}Ledger — Budgets{% endblock %}
+
+{% block content %}
+<h1>Budgets — {{ month }}</h1>
+
+<form class="filters" method="get" action="/budgets">
+  <div>
+    <label>Month</label>
+    <input type="month" name="month" value="{{ month }}">
+  </div>
+  <button type="submit">Go</button>
+</form>
+
+{% if warnings %}
+<div class="warnings">
+  {% for w in warnings %}
+  <div class="warning-item {{ w.severity.value }}">{{ w.message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2>Set Budget Limits</h2>
+<form method="post" action="/budgets">
+  <input type="hidden" name="month" value="{{ month }}">
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Budget Limit (IDR)</th>
+        <th>Used</th>
+        <th>Remaining</th>
+        <th>Progress</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cat in parent_categories %}
+      {% set current_limit = budget_limit_map.get(cat.id, 0) %}
+      {% set status = None %}
+      {% for b in budget_items %}
+        {% if b.category_id == cat.id %}
+          {% set status = b %}
+        {% endif %}
+      {% endfor %}
+      <tr>
+        <td><strong>{{ cat.display_name }}</strong></td>
+        <td>
+          <input type="number" name="limit_{{ cat.id }}"
+                 value="{{ current_limit if current_limit else '' }}"
+                 placeholder="0" min="0" step="50000"
+                 style="width:140px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.35rem 0.5rem;border-radius:var(--radius);font-size:0.85rem">
+        </td>
+        {% if status %}
+        <td class="amount">{{ idr(status.used) }}</td>
+        <td class="amount {% if status.remaining < 0 %}type-expense{% endif %}">{{ idr(status.remaining) }}</td>
+        <td style="min-width:120px">
+          {% set pct = (status.percent * 100)|round|int %}
+          {% set cls = "pct-ok" if pct < 80 else ("pct-warn" if pct < 100 else "pct-over") %}
+          <div class="progress-wrap">
+            <div class="progress-bar {{ cls }}" style="width:{{ [pct, 100]|min }}%"></div>
+          </div>
+          <span style="font-size:0.75rem;color:var(--text2)">{{ pct }}%</span>
+        </td>
+        {% else %}
+        <td class="amount" style="color:var(--text2)">—</td>
+        <td class="amount" style="color:var(--text2)">—</td>
+        <td style="color:var(--text2);font-size:0.8em">No budget set</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div style="margin-top:1rem">
+    <button type="submit" style="background:var(--accent);color:var(--bg);border:none;padding:0.55rem 1.5rem;border-radius:var(--radius);font-weight:600;cursor:pointer;font-size:0.9rem">Save Budgets</button>
+  </div>
+</form>
+
+{% if history %}
+<h2 style="margin-top:2.5rem">Change History</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Category</th>
+      <th>Previous</th>
+      <th>New</th>
+      <th>Source</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      <td style="white-space:nowrap;font-size:0.8em">{{ h.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>{{ cat_name_map.get(h.changed_category_id, h.changed_category_id) }}</td>
+      <td class="amount" style="color:var(--text2)">{{ idr(h.previous_amount) if h.previous_amount is not none else '—' }}</td>
+      <td class="amount">{{ idr(h.new_amount) }}</td>
+      <td style="font-size:0.8em;color:var(--text2)">{{ h.source }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

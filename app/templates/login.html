@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ledger — Login</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #475569;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --accent: #38bdf8;
+      --red: #f87171;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 380px;
+    }
+    .login-box h1 {
+      color: var(--accent);
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .login-box p {
+      color: var(--text2);
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+    .login-box label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text2);
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .login-box input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.6rem 0.75rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .login-box input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .login-box button {
+      width: 100%;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 0.65rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .login-box button:hover { opacity: 0.9; }
+    .error-msg {
+      background: rgba(248, 113, 113, 0.12);
+      color: var(--red);
+      border-left: 3px solid var(--red);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>Ledger</h1>
+    <p>Sign in to access the dashboard</p>
+    {% if error %}
+    <div class="error-msg">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required autofocus>
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required>
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+</body>
+</html>

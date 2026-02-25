@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% set active_page = "transactions" %}
+{% block title %}Ledger — Transactions{% endblock %}
+
+{% block content %}
+<h1>Transactions</h1>
+
+<form class="filters" method="get" action="/transactions">
+  <div>
+    <label>Month</label>
+    <input type="month" name="month" value="{{ month }}">
+  </div>
+  <div>
+    <label>Category</label>
+    <select name="category_id">
+      <option value="">All</option>
+      {% for group in category_tree %}
+      <optgroup label="{{ group.parent.display_name }}">
+        <option value="{{ group.parent.id }}" {% if filter_category == group.parent.id %}selected{% endif %}>All {{ group.parent.display_name }}</option>
+        {% for c in group.children %}
+        <option value="{{ c.id }}" {% if filter_category == c.id %}selected{% endif %}>{{ c.display_name }}</option>
+        {% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label>User</label>
+    <select name="user_id">
+      <option value="">All</option>
+      {% for u in users %}
+      <option value="{{ u.id }}" {% if filter_user == u.id %}selected{% endif %}>{{ u.display_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label>Account</label>
+    <select name="account_id">
+      <option value="">All</option>
+      {% for a in accounts %}
+      <option value="{{ a.id }}" {% if filter_account == a.id %}selected{% endif %}>{{ a.display_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label>Search</label>
+    <input type="text" name="search" value="{{ filter_search }}" placeholder="description…">
+  </div>
+  <button type="submit">Filter</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Category</th>
+      <th>User</th>
+      <th>Amount</th>
+      <th>Account</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in txns %}
+    <tr>
+      <td style="white-space:nowrap">{{ t.effective_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td><span class="type-{{ t.transaction_type }}">{{ t.transaction_type }}</span></td>
+      <td>{{ t.description or '—' }}{% if t.merchant %} <span style="color:var(--text2);font-size:0.8em">({{ t.merchant }})</span>{% endif %}</td>
+      <td>{{ cat_name_map.get(t.category_id, t.category_id) if t.category_id else '—' }}</td>
+      <td>{{ t.user_id }}</td>
+      <td class="amount type-{{ t.transaction_type }}">{{ idr(t.amount) }}</td>
+      <td style="font-size:0.8em;color:var(--text2)">
+        {% if t.from_account_id and t.to_account_id %}
+          {{ t.from_account_id }} → {{ t.to_account_id }}
+        {% elif t.from_account_id %}
+          {{ t.from_account_id }}
+        {% elif t.to_account_id %}
+          → {{ t.to_account_id }}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    {% if not txns %}
+    <tr><td colspan="7" style="text-align:center;color:var(--text2);padding:2rem">No transactions found.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?month={{ month }}&category_id={{ filter_category }}&user_id={{ filter_user }}&account_id={{ filter_account }}&search={{ filter_search }}&page={{ page - 1 }}">← Prev</a>
+  {% endif %}
+  <span>Page {{ page }} of {{ total_pages }} ({{ total }} records)</span>
+  {% if page < total_pages %}
+  <a href="?month={{ month }}&category_id={{ filter_category }}&user_id={{ filter_user }}&account_id={{ filter_account }}&search={{ filter_search }}&page={{ page + 1 }}">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
