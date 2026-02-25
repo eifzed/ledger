@@ -30,3 +30,18 @@ jobs:
             cp openclaw/skills/finance-api/api.sh "$OPENCLAW_WS/skills/finance-api/"
             chmod +x "$OPENCLAW_WS/skills/finance-api/api.sh"
             cp openclaw/skills/finance-api/tools/*.json "$OPENCLAW_WS/skills/finance-api/tools/"
+
+            # Restart OpenClaw gateway and clear Discord sessions
+            export PATH=/home/ubuntu/.npm-global/bin:$PATH
+            openclaw gateway restart
+            python3 -c "
+            import json, glob
+            for sf in glob.glob('/home/ubuntu/.openclaw/agents/*/sessions/sessions.json'):
+                with open(sf) as f:
+                    data = json.load(f)
+                keys = [k for k in data if 'discord' in k.lower()]
+                if keys:
+                    for k in keys: del data[k]
+                    with open(sf, 'w') as f:
+                        json.dump(data, f, indent=2)
+            "
