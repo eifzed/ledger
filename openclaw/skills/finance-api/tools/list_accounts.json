@@ -1,0 +1,16 @@
+{
+  "name": "list_accounts",
+  "description": "List all financial accounts with their details (type, currency, active status). Does not include balances — use get_account_balances for that.",
+  "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/accounts",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

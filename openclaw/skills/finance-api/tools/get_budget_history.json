@@ -1,0 +1,25 @@
+{
+  "name": "get_budget_history",
+  "description": "Get the history of budget changes (snapshots) for a given month. Shows when budgets were created or modified.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "month": {
+        "type": "string",
+        "description": "Month in YYYY-MM format (e.g. '2026-02'). Required."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Max results to return (1-200, default 50)."
+      }
+    },
+    "required": ["month"]
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/budgets/history",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

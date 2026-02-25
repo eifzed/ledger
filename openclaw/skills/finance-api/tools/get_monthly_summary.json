@@ -1,0 +1,21 @@
+{
+  "name": "get_monthly_summary",
+  "description": "Get a comprehensive monthly financial summary: total expenses, total income, net, spending breakdown by category and user, daily totals, top merchants, budget status, and warnings.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "month": {
+        "type": "string",
+        "description": "Month in YYYY-MM format (e.g. '2026-02'). Defaults to current month if omitted."
+      }
+    },
+    "required": []
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/summary/monthly",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

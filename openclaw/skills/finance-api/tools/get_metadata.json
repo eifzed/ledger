@@ -1,0 +1,16 @@
+{
+  "name": "get_metadata",
+  "description": "Get all reference data: categories (with subcategories), accounts, users, available payment methods, transaction types, and current server time. Call this first to discover valid IDs for categories, accounts, and users.",
+  "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/meta",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

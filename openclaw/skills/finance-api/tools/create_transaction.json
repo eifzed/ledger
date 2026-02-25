@@ -1,0 +1,71 @@
+{
+  "name": "create_transaction",
+  "description": "Create a financial transaction (expense, income, transfer, or adjustment). Returns the created transaction, updated account balances, budget status, and any warnings.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "user_id": {
+        "type": "string",
+        "description": "ID of the user logging this transaction (e.g. 'fazrin')."
+      },
+      "transaction_type": {
+        "type": "string",
+        "enum": ["expense", "income", "transfer", "adjustment"],
+        "description": "Type of transaction."
+      },
+      "amount": {
+        "type": "integer",
+        "description": "Amount in IDR (positive integer, no decimals)."
+      },
+      "currency": {
+        "type": "string",
+        "description": "Currency code. Defaults to 'IDR'."
+      },
+      "category_id": {
+        "type": "string",
+        "description": "Category ID (e.g. 'groceries'). Required for expense."
+      },
+      "description": {
+        "type": "string",
+        "description": "Item or merchant description (e.g. 'detergent indomaret')."
+      },
+      "merchant": {
+        "type": "string",
+        "description": "Merchant name (e.g. 'Indomaret')."
+      },
+      "payment_method": {
+        "type": "string",
+        "enum": ["cash", "qris", "debit", "credit", "bank_transfer", "ewallet", "other"],
+        "description": "How the payment was made."
+      },
+      "from_account_id": {
+        "type": "string",
+        "description": "Source account ID. Required for expense and transfer."
+      },
+      "to_account_id": {
+        "type": "string",
+        "description": "Destination account ID. Required for income and transfer. Must be null for expense."
+      },
+      "note": {
+        "type": "string",
+        "description": "Optional note."
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Optional key-value metadata (e.g. {\"raw_text\": \"user's original message\"})."
+      },
+      "effective_at": {
+        "type": "string",
+        "description": "ISO 8601 datetime of when the transaction happened. Defaults to server time if omitted."
+      }
+    },
+    "required": ["user_id", "transaction_type", "amount"]
+  },
+  "backend": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/v1/transactions",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "name": "correct_transaction",
+  "description": "Correct an existing transaction by voiding it and creating a new replacement transaction. Use this when a transaction was logged with wrong details (amount, category, account, etc.).",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "txn_id": {
+        "type": "string",
+        "description": "UUID of the original transaction to correct."
+      },
+      "user_id": {
+        "type": "string",
+        "description": "ID of the user logging this correction."
+      },
+      "transaction_type": {
+        "type": "string",
+        "enum": ["expense", "income", "transfer", "adjustment"],
+        "description": "Type of the corrected transaction."
+      },
+      "amount": {
+        "type": "integer",
+        "description": "Corrected amount in IDR (positive integer)."
+      },
+      "currency": {
+        "type": "string",
+        "description": "Currency code. Defaults to 'IDR'."
+      },
+      "category_id": {
+        "type": "string",
+        "description": "Corrected category ID. Required for expense."
+      },
+      "description": {
+        "type": "string",
+        "description": "Corrected item/merchant description."
+      },
+      "merchant": {
+        "type": "string",
+        "description": "Corrected merchant name."
+      },
+      "payment_method": {
+        "type": "string",
+        "enum": ["cash", "qris", "debit", "credit", "bank_transfer", "ewallet", "other"],
+        "description": "Corrected payment method."
+      },
+      "from_account_id": {
+        "type": "string",
+        "description": "Corrected source account ID."
+      },
+      "to_account_id": {
+        "type": "string",
+        "description": "Corrected destination account ID."
+      },
+      "note": {
+        "type": "string",
+        "description": "Optional note for the correction."
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Optional key-value metadata."
+      },
+      "effective_at": {
+        "type": "string",
+        "description": "ISO 8601 datetime. Defaults to server time if omitted."
+      }
+    },
+    "required": ["txn_id", "user_id", "transaction_type", "amount"]
+  },
+  "backend": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/v1/transactions/{txn_id}/correct",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

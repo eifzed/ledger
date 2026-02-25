@@ -1,0 +1,57 @@
+# TOOLS.md — Finance API Cheat Sheet
+
+## API Connection
+- **Base URL:** `http://127.0.0.1:8000`
+- **Auth:** `X-API-Key` header (via `$FINANCE_API_KEY`)
+- **Skill:** `finance-api` — read its SKILL.md for curl patterns and tool JSON definitions for endpoint schemas
+
+## Accounts
+
+| ID | Name | Type |
+|---|---|---|
+| `BCA` | BCA | bank |
+| `JAGO` | Jago | bank |
+| `CASH` | Cash | cash |
+| `GOPAY` | GoPay | ewallet |
+| `OVO` | OVO | ewallet |
+
+If the user says QRIS, the *payment_method* is `qris` — but you still need to know which account was charged.
+
+## Categories
+
+Parent → subcategories. Use the **subcategory** ID when one fits.
+
+- **food**: groceries, eating_out, coffee, delivery
+- **transport**: fuel, parking, toll, public_transport, ride_hailing
+- **bills**: electricity, water, internet, phone, gas_lpg, subscriptions
+- **housing**: rent, furnishing, maintenance, cleaning
+- **shopping**: clothing, electronics, household_items
+- **health**: medical, pharmacy, gym
+- **entertainment**: movies, games, hobbies, outings
+- **vehicle**: car_service, car_insurance, car_tax
+- **personal**: haircut, skincare
+- **education**: courses, books
+- **gifts**: gifts_items, charity, zakat
+- **investment**: gold, stock, bond, saving
+- **income**: salary, freelance, other_income
+
+Budgets can only be set on **parent** categories (e.g. `food`, not `groceries`).
+
+## Amount Shorthands
+
+| Input | Means | IDR |
+|---|---|---|
+| `50k`, `50rb` | 50 ribu | 50000 |
+| `2.5k` | 2.5 ribu | 2500 |
+| `1.5jt` | 1.5 juta | 1500000 |
+| `ceban` | slang 10k | 10000 |
+| `goban` | slang 50k | 50000 |
+| `cepek` | slang 100k | 100000 |
+
+## Payment Methods
+
+`cash`, `qris`, `debit`, `credit`, `bank_transfer`, `ewallet`, `other`
+
+## Transaction Types
+
+`expense`, `income`, `transfer`, `adjustment`

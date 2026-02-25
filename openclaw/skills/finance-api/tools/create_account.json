@@ -1,0 +1,34 @@
+{
+  "name": "create_account",
+  "description": "Create a new financial account (bank account, cash, e-wallet, credit card, etc.). The account ID becomes the permanent identifier used in transactions.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Unique account identifier (e.g. 'BCA', 'CASH', 'JAGO'). 1-50 characters."
+      },
+      "display_name": {
+        "type": "string",
+        "description": "Human-readable account name (e.g. 'BCA Checking')."
+      },
+      "type": {
+        "type": "string",
+        "enum": ["bank", "cash", "ewallet", "credit_card", "other"],
+        "description": "Type of account."
+      },
+      "currency": {
+        "type": "string",
+        "description": "Currency code. Defaults to 'IDR'."
+      }
+    },
+    "required": ["id", "display_name", "type"]
+  },
+  "backend": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/v1/accounts",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "get_transaction",
+  "description": "Get a single transaction by its ID. Returns full transaction details including status, category, accounts, and metadata.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "txn_id": {
+        "type": "string",
+        "description": "UUID of the transaction to retrieve."
+      }
+    },
+    "required": ["txn_id"]
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/transactions/{txn_id}",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

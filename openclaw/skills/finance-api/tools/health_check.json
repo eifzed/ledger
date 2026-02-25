@@ -1,0 +1,14 @@
+{
+  "name": "health_check",
+  "description": "Check if the finance API server is running and healthy. Returns {\"status\": \"ok\"} if the server is up.",
+  "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/health",
+    "headers": {}
+  }
+}

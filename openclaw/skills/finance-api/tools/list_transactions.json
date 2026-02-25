@@ -1,0 +1,45 @@
+{
+  "name": "list_transactions",
+  "description": "List and filter transactions. Supports filtering by month, category, user, account, and free-text search. Returns paginated results.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "month": {
+        "type": "string",
+        "description": "Filter by month in YYYY-MM format (e.g. '2026-02')."
+      },
+      "category_id": {
+        "type": "string",
+        "description": "Filter by category ID."
+      },
+      "user_id": {
+        "type": "string",
+        "description": "Filter by user ID."
+      },
+      "account_id": {
+        "type": "string",
+        "description": "Filter by account ID (matches either from_account_id or to_account_id)."
+      },
+      "search": {
+        "type": "string",
+        "description": "Free-text search across description, merchant, and note fields."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Max results to return (1-200, default 50)."
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Number of results to skip (default 0, for pagination)."
+      }
+    },
+    "required": []
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/transactions",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

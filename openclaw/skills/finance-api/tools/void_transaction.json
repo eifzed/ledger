@@ -1,0 +1,21 @@
+{
+  "name": "void_transaction",
+  "description": "Void (cancel) a posted transaction. The transaction's status changes to 'voided' and its effect on account balances is reversed. This is irreversible.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "txn_id": {
+        "type": "string",
+        "description": "UUID of the transaction to void."
+      }
+    },
+    "required": ["txn_id"]
+  },
+  "backend": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/v1/transactions/{txn_id}/void",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

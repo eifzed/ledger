@@ -1,0 +1,33 @@
+{
+  "name": "adjust_account_balance",
+  "description": "Adjust an account's balance by creating an adjustment transaction. Use this to set initial balances or reconcile discrepancies. Positive amount = credit (add money), negative = debit (remove money).",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "account_id": {
+        "type": "string",
+        "description": "ID of the account to adjust (e.g. 'BCA')."
+      },
+      "amount": {
+        "type": "integer",
+        "description": "Adjustment amount in IDR. Positive = add to balance, negative = subtract from balance."
+      },
+      "user_id": {
+        "type": "string",
+        "description": "ID of the user making this adjustment."
+      },
+      "note": {
+        "type": "string",
+        "description": "Reason for the adjustment (e.g. 'Initial balance', 'Reconciliation')."
+      }
+    },
+    "required": ["account_id", "amount", "user_id"]
+  },
+  "backend": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/v1/accounts/{account_id}/adjust",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

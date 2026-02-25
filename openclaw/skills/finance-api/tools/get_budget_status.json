@@ -1,0 +1,21 @@
+{
+  "name": "get_budget_status",
+  "description": "Get budget usage status for a month: how much of each budget has been used, remaining amounts, percentages, and warnings for budgets approaching or exceeding their limits.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "month": {
+        "type": "string",
+        "description": "Month in YYYY-MM format (e.g. '2026-02'). Defaults to current month if omitted."
+      }
+    },
+    "required": []
+  },
+  "backend": {
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/v1/budgets/status",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}

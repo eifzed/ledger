@@ -1,0 +1,33 @@
+{
+  "name": "upsert_budget",
+  "description": "Create or update a monthly budget limit for a parent category. Only parent categories (not subcategories) can have budgets. Set scope_user_id to null for household-level budgets.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "month": {
+        "type": "string",
+        "description": "Budget month in YYYY-MM format (e.g. '2026-02')."
+      },
+      "category_id": {
+        "type": "string",
+        "description": "Parent category ID to set the budget for."
+      },
+      "limit_amount": {
+        "type": "integer",
+        "description": "Monthly spending limit in IDR (positive integer)."
+      },
+      "scope_user_id": {
+        "type": "string",
+        "description": "User ID to scope this budget to. Null means household-level (applies to all users)."
+      }
+    },
+    "required": ["month", "category_id", "limit_amount"]
+  },
+  "backend": {
+    "method": "PUT",
+    "url": "http://127.0.0.1:8000/v1/budgets/{month}/{category_id}",
+    "headers": {
+      "X-API-Key": "${FINANCE_API_KEY}"
+    }
+  }
+}
