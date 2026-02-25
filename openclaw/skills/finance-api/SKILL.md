@@ -1,6 +1,7 @@
 ---
 name: finance-api
 description: Household finance API — log transactions, manage budgets, check balances, and get summaries.
+user-invocable: false
 metadata: {"openclaw":{"requires":{"env":["FINANCE_API_KEY"]},"primaryEnv":"FINANCE_API_KEY"}}
 ---
 
