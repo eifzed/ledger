@@ -7,13 +7,17 @@ metadata: {"openclaw":{"requires":{"env":["FINANCE_API_KEY"]},"primaryEnv":"FINA
 
 # Finance API
 
-Household finance backend on `http://127.0.0.1:8000`. Use the wrapper script for all calls:
+Household finance backend. All calls go through `exec` with `curl`.
+
+**Base URL:** `http://127.0.0.1:8000`
+
+Every request needs the API key header. Use this pattern for ALL calls:
 
 ```bash
-{baseDir}/api.sh <METHOD> <PATH> [JSON_BODY]
+curl -s -X <METHOD> "http://127.0.0.1:8000<PATH>" -H "X-API-Key: $FINANCE_API_KEY" [-H "Content-Type: application/json" -d '<JSON_BODY>']
 ```
 
-The script handles base URL, `X-API-Key` auth, and `Content-Type` automatically.
+**CRITICAL:** Always use `exec` with `curl` as shown above. Never use `web_fetch` — it cannot send the required `X-API-Key` header.
 
 ---
 
@@ -22,7 +26,7 @@ The script handles base URL, `X-API-Key` auth, and `Content-Type` automatically.
 ### Create transaction
 
 ```bash
-{baseDir}/api.sh POST /v1/transactions '{
+curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{
   "user_id": "fazrin",
   "transaction_type": "expense",
   "amount": 65000,
@@ -48,7 +52,7 @@ The script handles base URL, `X-API-Key` auth, and `Content-Type` automatically.
 ### List transactions
 
 ```bash
-{baseDir}/api.sh GET "/v1/transactions?month=2026-02&user_id=fazrin&limit=10"
+curl -s -X GET "http://127.0.0.1:8000/v1/transactions?month=2026-02&user_id=fazrin&limit=10" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 Query params: `month` (YYYY-MM), `category_id`, `user_id`, `account_id`, `search`, `limit` (1-200, default 50), `offset` (default 0).
@@ -56,13 +60,13 @@ Query params: `month` (YYYY-MM), `category_id`, `user_id`, `account_id`, `search
 ### Get single transaction
 
 ```bash
-{baseDir}/api.sh GET /v1/transactions/TRANSACTION_UUID
+curl -s -X GET "http://127.0.0.1:8000/v1/transactions/TRANSACTION_UUID" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ### Void transaction
 
 ```bash
-{baseDir}/api.sh POST /v1/transactions/TRANSACTION_UUID/void
+curl -s -X POST "http://127.0.0.1:8000/v1/transactions/TRANSACTION_UUID/void" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 Irreversibly sets status to "voided" and reverses balance effects.
@@ -70,7 +74,7 @@ Irreversibly sets status to "voided" and reverses balance effects.
 ### Correct transaction
 
 ```bash
-{baseDir}/api.sh POST /v1/transactions/TRANSACTION_UUID/correct '{
+curl -s -X POST "http://127.0.0.1:8000/v1/transactions/TRANSACTION_UUID/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{
   "user_id": "fazrin",
   "transaction_type": "expense",
   "amount": 75000,
@@ -88,7 +92,7 @@ Voids the original and creates a replacement. Body is the same schema as create.
 ### Get budget status
 
 ```bash
-{baseDir}/api.sh GET "/v1/budgets/status?month=2026-02"
+curl -s -X GET "http://127.0.0.1:8000/v1/budgets/status?month=2026-02" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 Returns usage, remaining, percent, and warnings per category. `month` defaults to current month if omitted.
@@ -96,13 +100,13 @@ Returns usage, remaining, percent, and warnings per category. `month` defaults t
 ### List budgets
 
 ```bash
-{baseDir}/api.sh GET "/v1/budgets?month=2026-02"
+curl -s -X GET "http://127.0.0.1:8000/v1/budgets?month=2026-02" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ### Upsert budget
 
 ```bash
-{baseDir}/api.sh PUT /v1/budgets/2026-02/food '{"limit_amount": 3000000}'
+curl -s -X PUT "http://127.0.0.1:8000/v1/budgets/2026-02/food" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"limit_amount": 3000000}'
 ```
 
 Path: `/v1/budgets/{month}/{category_id}`. Only parent categories allowed. Optional `scope_user_id` (null = household).
@@ -110,7 +114,7 @@ Path: `/v1/budgets/{month}/{category_id}`. Only parent categories allowed. Optio
 ### Budget history
 
 ```bash
-{baseDir}/api.sh GET "/v1/budgets/history?month=2026-02&limit=50"
+curl -s -X GET "http://127.0.0.1:8000/v1/budgets/history?month=2026-02&limit=50" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ---
@@ -120,19 +124,19 @@ Path: `/v1/budgets/{month}/{category_id}`. Only parent categories allowed. Optio
 ### Get balances
 
 ```bash
-{baseDir}/api.sh GET /v1/accounts/balances
+curl -s -X GET "http://127.0.0.1:8000/v1/accounts/balances" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ### List accounts
 
 ```bash
-{baseDir}/api.sh GET /v1/accounts
+curl -s -X GET "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ### Create account
 
 ```bash
-{baseDir}/api.sh POST /v1/accounts '{"id": "DANA", "display_name": "Dana", "type": "ewallet"}'
+curl -s -X POST "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"id": "DANA", "display_name": "Dana", "type": "ewallet"}'
 ```
 
 Types: `bank`, `cash`, `ewallet`, `credit_card`, `other`.
@@ -140,7 +144,7 @@ Types: `bank`, `cash`, `ewallet`, `credit_card`, `other`.
 ### Adjust balance
 
 ```bash
-{baseDir}/api.sh POST /v1/accounts/BCA/adjust '{"amount": 5000000, "user_id": "fazrin", "note": "Initial balance"}'
+curl -s -X POST "http://127.0.0.1:8000/v1/accounts/BCA/adjust" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"amount": 5000000, "user_id": "fazrin", "note": "Initial balance"}'
 ```
 
 Positive = credit, negative = debit.
@@ -152,7 +156,7 @@ Positive = credit, negative = debit.
 ### Monthly summary
 
 ```bash
-{baseDir}/api.sh GET "/v1/summary/monthly?month=2026-02"
+curl -s -X GET "http://127.0.0.1:8000/v1/summary/monthly?month=2026-02" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 Returns: `total_expenses`, `total_income`, `net`, `by_category`, `by_user`, `daily_totals`, `top_merchants`, `budget_status`, `warnings`.
@@ -160,7 +164,7 @@ Returns: `total_expenses`, `total_income`, `net`, `by_category`, `by_user`, `dai
 ### Get metadata
 
 ```bash
-{baseDir}/api.sh GET /v1/meta
+curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 Returns all categories, accounts, users, payment methods, transaction types, and server time. Call this to discover valid IDs.
@@ -168,7 +172,7 @@ Returns all categories, accounts, users, payment methods, transaction types, and
 ### Health check
 
 ```bash
-{baseDir}/api.sh GET /health
+curl -s -X GET "http://127.0.0.1:8000/health" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ---
