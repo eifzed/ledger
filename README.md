@@ -94,10 +94,12 @@ Returns all categories, accounts, users, payment methods, transaction types, and
 ```
 POST   /v1/transactions                          # Create
 GET    /v1/transactions?month=YYYY-MM&limit=50   # List (filters: category_id, user_id, account_id, search, offset)
-GET    /v1/transactions/{id}                      # Get one
+GET    /v1/transactions/{id}                      # Get one (id is an integer)
 POST   /v1/transactions/{id}/void                 # Void (irreversible)
 POST   /v1/transactions/{id}/correct              # Correct (voids original + creates replacement)
 ```
+
+Transaction IDs are auto-incrementing integers (1, 2, 3, ...). Users are auto-created on their first transaction.
 
 **Create body:**
 
@@ -126,7 +128,7 @@ POST   /v1/transactions/{id}/correct              # Correct (voids original + cr
 
 **Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601).
 
-**Response** includes: `transaction`, `balances`, `budget_status`, `warnings`.
+**Response** includes: `transaction` (with integer `id`), `balances`, `budget_status`, `warnings`.
 
 ### Budgets
 
@@ -174,7 +176,7 @@ Error codes: `VALIDATION_ERROR`, `NEEDS_CLARIFICATION`, `NOT_FOUND`, `DUPLICATE`
 
 On first run, the server seeds:
 
-**Users:** `fazrin` (Fazrin), `magfira` (Magfira)
+**Users:** `fazrin` (Fazrin), `magfira` (Magfira) — additional users are auto-created on first transaction
 
 **Accounts:**
 
@@ -227,7 +229,7 @@ openclaw/
 │   │                          # clarification rules, formatting, safety guardrails
 │   ├── IDENTITY.md            # Bot name, persona, emoji
 │   ├── SOUL.md                # Behavioral philosophy and boundaries
-│   ├── USER.md                # Household members (user_ids, names, timezone)
+│   ├── USER.md                # User handling: auto-creation, default currency
 │   ├── TOOLS.md               # Quick-reference cheat sheet: accounts, categories,
 │   │                          # amount shorthands, payment methods
 │   ├── BOOTSTRAP.md           # First-run setup checklist and intro message
@@ -253,7 +255,7 @@ OpenClaw builds a system prompt by injecting these Markdown files into the agent
 | `AGENTS.md` | The main instruction set. Defines how to call the API (always `exec` with `curl`), slash command behavior (`/log`, `/budget`, `/balance`, `/summary`, `/revise`), clarification rules, formatting rules, and safety constraints. |
 | `IDENTITY.md` | Bot name ("Ledger"), persona, and emoji. |
 | `SOUL.md` | Behavioral guide: be precise with money, casual with words, proactive but not annoying. Defines language style and hard boundaries. |
-| `USER.md` | Lists household members with their `user_id`, display names, and timezone. |
+| `USER.md` | User handling: auto-creation from Discord display names, default currency (IDR). |
 | `TOOLS.md` | Quick-reference for accounts, categories, amount shorthands (50k=50000, 1.5jt=1500000), payment methods, and transaction types. Keeps this info out of AGENTS.md to reduce prompt size. |
 | `BOOTSTRAP.md` | One-time first-run instructions. The agent introduces itself and verifies the API is online. |
 | `HEARTBEAT.md` | Periodic task definition. Checks budget status and alerts if any category exceeds 80%. |
@@ -345,7 +347,7 @@ Same steps as local, plus:
 | Bot says "command not found" | It's trying to run `finance-api` as a CLI binary | Verify `SKILL.md` has `user-invocable: false` and `AGENTS.md` instructs `exec` with `curl` |
 | 401 Unauthorized from API | Missing `X-API-Key` header | Bot is using `web_fetch` instead of `exec` with `curl`. Check `AGENTS.md` has the `web_fetch` prohibition. Also verify `FINANCE_API_KEY` is set in `~/.openclaw/.env` |
 | Bot can't find `api.sh` / `{baseDir}` errors | `{baseDir}` doesn't resolve in `read` tool output | Use inline curl commands in SKILL.md (current approach) instead of `{baseDir}/api.sh` references |
-| Bot asks for user_id on Discord | Can't map Discord user to `user_id` | `USER.md` maps names to IDs. On Discord, the bot should derive `user_id` from the sender's display name. |
+| Bot asks for user_id on Discord | Not extracting sender name from Discord message | `AGENTS.md` instructs the bot to lowercase the sender's display name and use it as `user_id`. Users are auto-created on first transaction. |
 | Skill not showing in `openclaw skills list` | Files not in the right location | Skill must be at `<workspace>/skills/finance-api/SKILL.md` with valid YAML frontmatter |
 
 ---

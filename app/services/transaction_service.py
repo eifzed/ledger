@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import uuid
 from datetime import datetime
 
 from sqlalchemy import func
@@ -24,7 +23,6 @@ def create_transaction(db: Session, data: TransactionCreate) -> dict:
     month = effective.strftime("%Y-%m")
 
     txn = Transaction(
-        id=str(uuid.uuid4()),
         effective_at=effective,
         user_id=data.user_id,
         transaction_type=data.transaction_type.value,
@@ -96,11 +94,11 @@ def list_transactions(
     return rows, total
 
 
-def get_transaction(db: Session, txn_id: str) -> Transaction | None:
+def get_transaction(db: Session, txn_id: int) -> Transaction | None:
     return db.query(Transaction).filter(Transaction.id == txn_id).first()
 
 
-def void_transaction(db: Session, txn_id: str) -> Transaction:
+def void_transaction(db: Session, txn_id: int) -> Transaction:
     txn = get_transaction(db, txn_id)
     if txn is None:
         raise LedgerHTTPException(404, "NOT_FOUND", "Transaction not found")
@@ -112,7 +110,7 @@ def void_transaction(db: Session, txn_id: str) -> Transaction:
     return txn
 
 
-def correct_transaction(db: Session, txn_id: str, data: TransactionCreate) -> dict:
+def correct_transaction(db: Session, txn_id: int, data: TransactionCreate) -> dict:
     original = get_transaction(db, txn_id)
     if original is None:
         raise LedgerHTTPException(404, "NOT_FOUND", "Original transaction not found")
@@ -124,7 +122,6 @@ def correct_transaction(db: Session, txn_id: str, data: TransactionCreate) -> di
     effective = data.effective_at or now_jakarta()
 
     new_txn = Transaction(
-        id=str(uuid.uuid4()),
         effective_at=effective,
         user_id=data.user_id,
         transaction_type=data.transaction_type.value,
@@ -158,11 +155,17 @@ def correct_transaction(db: Session, txn_id: str, data: TransactionCreate) -> di
     }
 
 
-def _validate_references(db: Session, data: TransactionCreate) -> None:
-    missing: list[ErrorDetail] = []
+def _ensure_user(db: Session, user_id: str) -> None:
+    """Auto-create the user if they don't exist yet."""
+    if not db.query(User).filter(User.id == user_id).first():
+        db.add(User(id=user_id, display_name=user_id))
+        db.flush()
 
-    if not db.query(User).filter(User.id == data.user_id).first():
-        missing.append(ErrorDetail(field="user_id", issue=f"User '{data.user_id}' not found"))
+
+def _validate_references(db: Session, data: TransactionCreate) -> None:
+    _ensure_user(db, data.user_id)
+
+    missing: list[ErrorDetail] = []
 
     if data.category_id and not db.query(Category).filter(Category.id == data.category_id).first():
         missing.append(ErrorDetail(field="category_id", issue=f"Category '{data.category_id}' not found"))

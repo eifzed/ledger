@@ -66,7 +66,7 @@ class Budget(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    id = Column(String, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     effective_at = Column(DateTime, nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -82,7 +82,7 @@ class Transaction(Base):
     external_ref = Column(String, nullable=True)
     note = Column(Text, nullable=True)
     status = Column(String, default="posted", nullable=False)
-    correction_of = Column(String, ForeignKey("transactions.id"), nullable=True)
+    correction_of = Column(Integer, ForeignKey("transactions.id"), nullable=True)
     metadata_json = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="transactions")

@@ -47,7 +47,7 @@ curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_
 
 **Optional fields:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash|qris|debit|credit|bank_transfer|ewallet|other), `note`, `metadata`, `effective_at` (ISO 8601, defaults to now).
 
-**Response** includes: `transaction`, `balances`, `budget_status`, `warnings`.
+**Response** includes: `transaction` (with integer `id` — always show it as `#id` in receipts), `balances`, `budget_status`, `warnings`.
 
 ### List transactions
 
@@ -60,13 +60,15 @@ Query params: `month` (YYYY-MM), `category_id`, `user_id`, `account_id`, `search
 ### Get single transaction
 
 ```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/transactions/TRANSACTION_UUID" -H "X-API-Key: $FINANCE_API_KEY"
+curl -s -X GET "http://127.0.0.1:8000/v1/transactions/42" -H "X-API-Key: $FINANCE_API_KEY"
 ```
+
+Transaction IDs are auto-incrementing integers (1, 2, 3, ...).
 
 ### Void transaction
 
 ```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/transactions/TRANSACTION_UUID/void" -H "X-API-Key: $FINANCE_API_KEY"
+curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/void" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 Irreversibly sets status to "voided" and reverses balance effects.
@@ -74,7 +76,7 @@ Irreversibly sets status to "voided" and reverses balance effects.
 ### Correct transaction
 
 ```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/transactions/TRANSACTION_UUID/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{
+curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{
   "user_id": "fazrin",
   "transaction_type": "expense",
   "amount": 75000,

@@ -195,7 +195,7 @@ class TransactionCreate(BaseModel):
 
 
 class TransactionOut(BaseModel):
-    id: str
+    id: int
     created_at: datetime
     effective_at: datetime
     user_id: str
@@ -210,7 +210,7 @@ class TransactionOut(BaseModel):
     to_account_id: str | None = None
     note: str | None = None
     status: str
-    correction_of: str | None = None
+    correction_of: int | None = None
     metadata_json: dict[str, Any] | None = Field(None, alias="metadata_json")
 
     model_config = {"from_attributes": True, "populate_by_name": True}

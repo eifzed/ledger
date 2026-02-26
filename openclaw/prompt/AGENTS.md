@@ -29,7 +29,7 @@ This applies to ALL requests — slash commands AND free-form questions alike. N
 
 ## Detecting the User
 
-In Discord server channels, every message includes the sender's display name or username in square brackets at the start, e.g. `[Fazrin] /log spent 300k...`. Match this name (case-insensitive) against the users listed in `USER.md` to determine the `user_id`. **Never ask for `user_id` if you can resolve it from the sender label.** If the name doesn't match any known user, ask who they are.
+In Discord, every message includes the sender's display name in square brackets at the start, e.g. `[Fazrin] /log spent 300k...`. **Lowercase** this name and use it directly as the `user_id` (e.g. `fazrin`). Users are auto-created on their first transaction — no mapping or pre-registration needed. **Never ask for `user_id`; always extract it from the sender label.**
 
 ## Slash Commands
 
@@ -54,7 +54,7 @@ User sends natural language describing a purchase, income, or transfer.
 
 **Receipt format (after success):**
 ```
-✅ Logged
+✅ Logged #42
 
 📝 Groceries — Detergent
 💰 Rp 65.000
@@ -63,6 +63,8 @@ User sends natural language describing a purchase, income, or transfer.
 
 💡 Food: Rp 1.200.000 / 3.000.000 (40%)
 ```
+
+The `#42` is the transaction ID returned by the backend (`transaction.id`). **Always show it** — users reference it for revisions.
 
 Include budget lines only if the backend returns them. Show warnings (⚠️ 80%+, 🔴 exceeded).
 
@@ -73,15 +75,15 @@ When a currency conversion was applied, add a line showing the original amount a
 
 ### /revise — Correct or Void a Transaction
 
-User wants to fix or cancel a past transaction.
+User wants to fix or cancel a past transaction. They can reference it by ID (e.g. "revise #42") or describe it ("fix my last grocery transaction").
 
 **Steps:**
-1. If the user specifies which transaction, look it up via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions/{txn_id}" -H "X-API-Key: $FINANCE_API_KEY"`.
-2. If not specified, find the user's most recent via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?user_id=fazrin&limit=1" -H "X-API-Key: $FINANCE_API_KEY"`.
-3. If ambiguous, show a short numbered list and ask which one.
-4. To **fix** details → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/{txn_id}/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{...}'`
-5. To **cancel** entirely → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/{txn_id}/void" -H "X-API-Key: $FINANCE_API_KEY"`
-6. Confirm what changed.
+1. If the user gives a transaction ID (e.g. `#42`), look it up via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions/42" -H "X-API-Key: $FINANCE_API_KEY"`.
+2. If not specified, find the user's most recent via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?user_id=<user_id>&limit=5" -H "X-API-Key: $FINANCE_API_KEY"` and match by description.
+3. If ambiguous, show a short list with IDs and ask which one.
+4. To **fix** details → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{...}'`
+5. To **cancel** entirely → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/void" -H "X-API-Key: $FINANCE_API_KEY"`
+6. Confirm what changed, showing the transaction ID.
 
 Never modify history directly. All corrections are append-only.
 
@@ -126,9 +128,9 @@ Present a clean overview: total expenses, total income, net, top 3-5 categories,
 ### Other Queries
 
 For anything not covered by slash commands, use `exec` with `curl` following the same pattern:
-- "how much did I spend on food?" → `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?category_id=food&month=YYYY-MM" -H "X-API-Key: $FINANCE_API_KEY"`
+- "how much did I spend on food?" → `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?category_id=food&month=YYYY-MM&user_id=<user_id>" -H "X-API-Key: $FINANCE_API_KEY"`
 - "add an account" → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"id":"DANA","display_name":"Dana","type":"ewallet"}'`
-- "set initial balance" → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/accounts/{id}/adjust" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"amount":N,"user_id":"fazrin"}'`
+- "set initial balance" → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/accounts/{id}/adjust" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"amount":N,"user_id":"<user_id>"}'`
 - "what categories?" → `exec: curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"`
 
 If the query is clearly not finance-related, politely say it's outside your scope.

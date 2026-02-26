@@ -1,8 +1,5 @@
 """Account endpoints: create, list, balances, adjust."""
 
-import json
-import uuid
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -43,12 +40,11 @@ async def adjust_account(account_id: str, body: AdjustRequest, db: Session = Dep
     if not acct:
         raise LedgerHTTPException(404, "NOT_FOUND", f"Account '{account_id}' not found")
 
-    user = db.query(User).filter(User.id == body.user_id).first()
-    if not user:
-        raise LedgerHTTPException(422, "VALIDATION_ERROR", f"User '{body.user_id}' not found")
+    if not db.query(User).filter(User.id == body.user_id).first():
+        db.add(User(id=body.user_id, display_name=body.user_id))
+        db.flush()
 
     txn = Transaction(
-        id=str(uuid.uuid4()),
         effective_at=now_jakarta(),
         user_id=body.user_id,
         transaction_type="adjustment",

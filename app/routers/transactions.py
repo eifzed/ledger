@@ -58,7 +58,7 @@ async def list_transactions(
 
 
 @router.get("/transactions/{txn_id}", response_model=TransactionOut)
-async def get_transaction(txn_id: str, db: Session = Depends(get_db)):
+async def get_transaction(txn_id: int, db: Session = Depends(get_db)):
     txn = transaction_service.get_transaction(db, txn_id)
     if txn is None:
         raise LedgerHTTPException(404, "NOT_FOUND", "Transaction not found")
@@ -66,13 +66,13 @@ async def get_transaction(txn_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/transactions/{txn_id}/void", response_model=TransactionOut)
-async def void_transaction(txn_id: str, db: Session = Depends(get_db)):
+async def void_transaction(txn_id: int, db: Session = Depends(get_db)):
     txn = transaction_service.void_transaction(db, txn_id)
     return TransactionOut.model_validate(txn)
 
 
 @router.post("/transactions/{txn_id}/correct", response_model=TransactionCreateResponse)
-async def correct_transaction(txn_id: str, body: TransactionCreate, db: Session = Depends(get_db)):
+async def correct_transaction(txn_id: int, body: TransactionCreate, db: Session = Depends(get_db)):
     result = transaction_service.correct_transaction(db, txn_id, body)
     return TransactionCreateResponse(
         transaction=TransactionOut.model_validate(result["transaction"]),
