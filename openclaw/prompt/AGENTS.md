@@ -83,12 +83,19 @@ When a currency conversion was applied, add a line showing the original amount a
 User wants to fix or cancel a past transaction. They can reference it by ID (e.g. "revise #42") or describe it ("fix my last grocery transaction"). Revisions can change any field including `effective_at` (e.g. "revise #42 at 3pm", "revise #42 yesterday 5pm").
 
 **Steps:**
-1. If the user gives a transaction ID (e.g. `#42`), look it up via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions/42" -H "X-API-Key: $FINANCE_API_KEY"`.
-2. If not specified, find the user's most recent via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?user_id=<user_id>&limit=5" -H "X-API-Key: $FINANCE_API_KEY"` and match by description.
-3. If ambiguous, show a short list with IDs and ask which one.
-4. To **fix** details (including time) → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{...}'`. Include `effective_at` in the correction body when revising time. Parse time expressions the same way as `/log` (see "Time Parsing").
-5. To **cancel** entirely → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/void" -H "X-API-Key: $FINANCE_API_KEY"`
-6. Confirm what changed, showing the transaction ID. If time was revised, show the old and new time.
+1. **Always** look up the original transaction first:
+   - By ID: `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions/42" -H "X-API-Key: $FINANCE_API_KEY"`
+   - By description: `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?user_id=<user_id>&limit=5" -H "X-API-Key: $FINANCE_API_KEY"` and match.
+2. If ambiguous, show a short list with IDs and ask which one.
+3. To **fix** details (including time):
+   - **Copy ALL fields** from the original transaction (`user_id`, `transaction_type`, `amount`, `category_id`, `from_account_id`, `to_account_id`, `description`, `merchant`, `payment_method`, `effective_at`, `metadata`).
+   - **Override ONLY the fields the user wants to change.** Do NOT ask for fields that aren't being changed — they carry over from the original.
+   - Send the complete body: `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{...full body with changes applied...}'`
+   - Parse time expressions the same way as `/log` (see "Time Parsing").
+4. To **cancel** entirely → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/void" -H "X-API-Key: $FINANCE_API_KEY"`
+5. Confirm what changed, showing the transaction ID. If time was revised, show the old and new time.
+
+**IMPORTANT:** The `/correct` endpoint requires a full transaction body. Never ask the user to re-provide fields they aren't changing. Always fetch the original first, copy its data, and only modify what the user asked to change.
 
 Never modify history directly. All corrections are append-only.
 
@@ -150,6 +157,12 @@ If the query is clearly not finance-related, politely say it's outside your scop
 
 When the user specifies when a transaction happened, parse it into an ISO 8601 `effective_at` value (timezone: `Asia/Jakarta` UTC+7 unless the user's context indicates otherwise, e.g. Magfira in Australia would use `Australia/Sydney`).
 
+**CRITICAL: Get the current date/time first.** You do NOT inherently know today's date. Before parsing any relative time expression ("yesterday", "2 days ago", "last friday"), you MUST check the server time by calling:
+```
+exec: curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"
+```
+The response includes `server_time` — use that as "now" for all relative calculations.
+
 **Parsing rules (all times are 24-hour internally):**
 
 | User says | Interpretation |
@@ -168,7 +181,7 @@ When the user specifies when a transaction happened, parse it into an ISO 8601 `
 **Bare number disambiguation:** A bare number 1–12 defaults to AM. 13–23 is unambiguous 24h. If the context strongly suggests PM (e.g. "lunch at 1" → 13:00, "dinner at 7" → 19:00), use PM.
 
 **Ambiguous / vague expressions:** If the user says something vague like "this morning", "last week", or "a few days ago":
-1. Make your best guess for the date.
+1. Make your best guess for the date based on `server_time`.
 2. Log the transaction at that date with a reasonable time.
 3. In the receipt, mention the time you used and say: "if the time is wrong, just say `/revise #ID at <correct time>`".
 
@@ -178,7 +191,7 @@ When the user specifies when a transaction happened, parse it into an ISO 8601 `
 ```
 🕐 25 Feb 2026 05:00
 ```
-When `effective_at` is today but a specific time was given, still show it.
+When `effective_at` is today but a specific time was given, still show it. **Always confirm the exact date and time in the receipt** so the user can verify.
 
 **Revising time:** Users can revise the time of a transaction using `/revise #42 at 3pm` or `/revise #42 yesterday 5pm`. When correcting, include the updated `effective_at` in the correction payload.
 
