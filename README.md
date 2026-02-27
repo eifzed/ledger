@@ -109,11 +109,12 @@ Transaction IDs are auto-incrementing integers (1, 2, 3, ...). Users are auto-cr
   "transaction_type": "expense",
   "amount": 65000,
   "category_id": "groceries",
-  "from_account_id": "BCA",
+  "from_account_id": "fazrin_BCA",
   "description": "detergent",
   "merchant": "Indomaret",
   "payment_method": "qris",
-  "metadata": {"raw_text": "beli detergent 65k qris bca"}
+  "effective_at": "2026-02-25T05:00:00+07:00",
+  "metadata": {"raw_text": "beli detergent 65k qris bca at 5am"}
 }
 ```
 
@@ -126,7 +127,7 @@ Transaction IDs are auto-incrementing integers (1, 2, 3, ...). Users are auto-cr
 | `transfer` | `user_id`, `amount`, `from_account_id`, `to_account_id` | |
 | `adjustment` | `user_id`, `amount` | |
 
-**Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601).
+**Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601 with timezone offset, e.g. `2026-02-25T05:00:00+07:00`; defaults to current server time if omitted).
 
 **Response** includes: `transaction` (with integer `id`), `balances`, `budget_status`, `warnings`.
 
@@ -142,19 +143,21 @@ GET  /v1/budgets/history?month=YYYY-MM&limit=50    # Audit log
 ### Accounts
 
 ```
-GET   /v1/accounts                    # List all
-GET   /v1/accounts/balances           # Computed balances
-POST  /v1/accounts                    # Create (types: bank, cash, ewallet, credit_card, other)
-POST  /v1/accounts/{id}/adjust        # Adjust balance (positive=credit, negative=debit)
+GET   /v1/accounts?user_id=fazrin             # List (optional user_id filter by owner)
+GET   /v1/accounts/balances?user_id=fazrin    # Computed balances (optional user_id filter)
+POST  /v1/accounts                            # Create (types: bank, cash, ewallet, credit_card, other; include owner_id)
+POST  /v1/accounts/{id}/adjust                # Adjust balance (positive=credit, negative=debit)
 ```
+
+Accounts have an `owner_id` field. Use `?user_id=` to filter by owner; omit for all accounts.
 
 ### Summary
 
 ```
-GET /v1/summary/monthly?month=YYYY-MM
+GET /v1/summary/monthly?month=YYYY-MM&user_id=fazrin
 ```
 
-Returns: `total_expenses`, `total_income`, `net`, `by_category`, `by_user`, `daily_totals`, `top_merchants`, `budget_status`, `warnings`.
+Returns: `total_expenses`, `total_income`, `net`, `by_category`, `by_user`, `daily_totals`, `top_merchants`, `budget_status`, `warnings`. The `user_id` parameter is optional — omit for household totals.
 
 ### Error Format
 
@@ -178,15 +181,19 @@ On first run, the server seeds:
 
 **Users:** `fazrin` (Fazrin), `magfira` (Magfira) — additional users are auto-created on first transaction
 
-**Accounts:**
+**Accounts** (per-user, prefixed with owner ID):
 
-| ID | Name | Type |
-|----|------|------|
-| `BCA` | BCA | bank |
-| `JAGO` | Jago | bank |
-| `CASH` | Cash | cash |
-| `GOPAY` | GoPay | ewallet |
-| `OVO` | OVO | ewallet |
+| ID | Name | Type | Owner |
+|----|------|------|-------|
+| `fazrin_BCA` | BCA | bank | fazrin |
+| `fazrin_JAGO` | Jago | bank | fazrin |
+| `fazrin_CASH` | Cash | cash | fazrin |
+| `fazrin_GOPAY` | GoPay | ewallet | fazrin |
+| `fazrin_OVO` | OVO | ewallet | fazrin |
+| `magfira_CBA` | CBA | bank | magfira |
+| `magfira_CASH` | Cash | cash | magfira |
+
+Each user's accounts are prefixed with their `user_id`. Transactions default to the user's own accounts unless specified otherwise.
 
 **Categories** (parent → subcategories, use subcategory IDs when possible):
 
@@ -252,10 +259,10 @@ OpenClaw builds a system prompt by injecting these Markdown files into the agent
 
 | File | Purpose |
 |------|---------|
-| `AGENTS.md` | The main instruction set. Defines how to call the API (always `exec` with `curl`), slash command behavior (`/log`, `/budget`, `/balance`, `/summary`, `/revise`), clarification rules, formatting rules, and safety constraints. |
+| `AGENTS.md` | The main instruction set. Defines how to call the API (always `exec` with `curl`), slash command behavior (`/log`, `/budget`, `/balance`, `/summary`, `/revise`), time parsing rules, foreign currency conversion, clarification rules, formatting rules, and safety constraints. |
 | `IDENTITY.md` | Bot name ("Ledger"), persona, and emoji. |
 | `SOUL.md` | Behavioral guide: be precise with money, casual with words, proactive but not annoying. Defines language style and hard boundaries. |
-| `USER.md` | User handling: auto-creation from Discord display names, default currency (IDR). |
+| `USER.md` | User handling: auto-creation from Discord display names, default currency (IDR), known household members with timezones (Fazrin in Jakarta UTC+7, Magfira in Sydney UTC+11). |
 | `TOOLS.md` | Quick-reference for accounts, categories, amount shorthands (50k=50000, 1.5jt=1500000), payment methods, and transaction types. Keeps this info out of AGENTS.md to reduce prompt size. |
 | `BOOTSTRAP.md` | One-time first-run instructions. The agent introduces itself and verifies the API is online. |
 | `HEARTBEAT.md` | Periodic task definition. Checks budget status and alerts if any category exceeds 80%. |
@@ -337,8 +344,7 @@ openclaw agent --session-id test --message "/balance" --json
 Same steps as local, plus:
 
 - Add `FINANCE_API_KEY` to `~/.openclaw/.env` on the server
-- The GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically syncs prompt and skill files on merge to `main`
-- After the workflow runs, restart the gateway: `openclaw gateway restart`
+- The GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically syncs prompt and skill files, restarts the gateway, and clears Discord sessions on merge to `main`
 
 ### Troubleshooting
 
@@ -415,6 +421,8 @@ On push to `main`, `.github/workflows/deploy.yml`:
 2. Pulls latest code
 3. Rebuilds and restarts the Docker container
 4. Copies prompt files and skill files to the OpenClaw workspace
+5. Restarts the OpenClaw gateway
+6. Clears Discord sessions (so the bot picks up updated prompts/skills immediately)
 
 ### Required GitHub Secrets
 

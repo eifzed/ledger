@@ -41,11 +41,12 @@ User sends natural language describing a purchase, income, or transfer.
 1. Extract `user_id` from the sender label at the start of the message (e.g. `[Fazrin]` → `"fazrin"`). See "CRITICAL: user_id Rule" above. NEVER ask for it.
 2. Parse the message to extract: `transaction_type`, `amount`, `category_id`, `from_account_id`, `to_account_id`, `description`, `merchant`, `payment_method`, `effective_at`.
 3. Convert amount shorthands (see TOOLS.md).
-4. If the amount is in a **foreign currency** (e.g. AUD, USD, SGD), convert it to IDR (see "Foreign Currency Conversion" below).
-5. Infer category from description/merchant when obvious.
-6. If a **required** field is missing, ask **one** short clarification question with specific options — don't call the backend yet.
-7. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. When a currency conversion was applied, also include `metadata.original_amount` and `metadata.original_currency` (e.g. `"original_amount": 200, "original_currency": "AUD"`). Refer to the finance-api SKILL.md for the full request schema.
-8. Format the response as a receipt using the backend-provided data.
+4. Parse time expressions into `effective_at` (see "Time Parsing" below). If not specified, omit `effective_at` (defaults to now).
+5. If the amount is in a **foreign currency** (e.g. AUD, USD, SGD), convert it to IDR (see "Foreign Currency Conversion" below).
+6. Infer category from description/merchant when obvious.
+7. If a **required** field is missing, ask **one** short clarification question with specific options — don't call the backend yet.
+8. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. When a currency conversion was applied, also include `metadata.original_amount` and `metadata.original_currency` (e.g. `"original_amount": 200, "original_currency": "AUD"`). Refer to the finance-api SKILL.md for the full request schema.
+9. Format the response as a receipt using the backend-provided data.
 
 **Account defaulting:** Each user has their own accounts (see TOOLS.md). When no account is specified, use the user's default account. If the user only has one account of the relevant type, use that. If ambiguous, ask. Account IDs are prefixed with the user's ID (e.g. `fazrin_BCA`).
 
@@ -62,11 +63,13 @@ User sends natural language describing a purchase, income, or transfer.
 💰 Rp 65.000
 💳 QRIS from BCA
 👤 Fazrin
+🕐 25 Feb 2026 05:00
 
 💡 Food: Rp 1.200.000 / 3.000.000 (40%)
 ```
 
 The `#42` is the transaction ID returned by the backend (`transaction.id`). **Always show it** — users reference it for revisions.
+The 🕐 line: show when a specific time was given or when the date is not today. Omit when no time was specified and the transaction is for now.
 
 Include budget lines only if the backend returns them. Show warnings (⚠️ 80%+, 🔴 exceeded).
 
@@ -77,15 +80,15 @@ When a currency conversion was applied, add a line showing the original amount a
 
 ### /revise — Correct or Void a Transaction
 
-User wants to fix or cancel a past transaction. They can reference it by ID (e.g. "revise #42") or describe it ("fix my last grocery transaction").
+User wants to fix or cancel a past transaction. They can reference it by ID (e.g. "revise #42") or describe it ("fix my last grocery transaction"). Revisions can change any field including `effective_at` (e.g. "revise #42 at 3pm", "revise #42 yesterday 5pm").
 
 **Steps:**
 1. If the user gives a transaction ID (e.g. `#42`), look it up via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions/42" -H "X-API-Key: $FINANCE_API_KEY"`.
 2. If not specified, find the user's most recent via `exec: curl -s -X GET "http://127.0.0.1:8000/v1/transactions?user_id=<user_id>&limit=5" -H "X-API-Key: $FINANCE_API_KEY"` and match by description.
 3. If ambiguous, show a short list with IDs and ask which one.
-4. To **fix** details → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{...}'`
+4. To **fix** details (including time) → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{...}'`. Include `effective_at` in the correction body when revising time. Parse time expressions the same way as `/log` (see "Time Parsing").
 5. To **cancel** entirely → `exec: curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/void" -H "X-API-Key: $FINANCE_API_KEY"`
-6. Confirm what changed, showing the transaction ID.
+6. Confirm what changed, showing the transaction ID. If time was revised, show the old and new time.
 
 Never modify history directly. All corrections are append-only.
 
@@ -142,6 +145,42 @@ For anything not covered by slash commands, use `exec` with `curl` following the
 - "what categories?" → `exec: curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"`
 
 If the query is clearly not finance-related, politely say it's outside your scope.
+
+## Time Parsing
+
+When the user specifies when a transaction happened, parse it into an ISO 8601 `effective_at` value (timezone: `Asia/Jakarta` UTC+7 unless the user's context indicates otherwise, e.g. Magfira in Australia would use `Australia/Sydney`).
+
+**Parsing rules (all times are 24-hour internally):**
+
+| User says | Interpretation |
+|---|---|
+| `at 5am` | Today 05:00 |
+| `at 5` | Today 05:00 (bare number ≤ 12 → AM) |
+| `at 17.30` | Today 17:30 (number > 12 → 24h) |
+| `at 3pm` | Today 15:00 |
+| `at 14` | Today 14:00 |
+| `yesterday 5pm` | Yesterday 17:00 |
+| `yesterday` | Yesterday, current time |
+| `2 days ago at 10am` | 2 days ago 10:00 |
+| `last friday 3pm` | Most recent past Friday 15:00 |
+| (not specified) | Omit `effective_at` — backend defaults to now |
+
+**Bare number disambiguation:** A bare number 1–12 defaults to AM. 13–23 is unambiguous 24h. If the context strongly suggests PM (e.g. "lunch at 1" → 13:00, "dinner at 7" → 19:00), use PM.
+
+**Ambiguous / vague expressions:** If the user says something vague like "this morning", "last week", or "a few days ago":
+1. Make your best guess for the date.
+2. Log the transaction at that date with a reasonable time.
+3. In the receipt, mention the time you used and say: "if the time is wrong, just say `/revise #ID at <correct time>`".
+
+**Format for API:** Always send as ISO 8601 with timezone offset, e.g. `"effective_at": "2026-02-25T05:00:00+07:00"`.
+
+**Receipt:** When `effective_at` differs from today, show a 🕐 line in the receipt:
+```
+🕐 25 Feb 2026 05:00
+```
+When `effective_at` is today but a specific time was given, still show it.
+
+**Revising time:** Users can revise the time of a transaction using `/revise #42 at 3pm` or `/revise #42 yesterday 5pm`. When correcting, include the updated `effective_at` in the correction payload.
 
 ## Foreign Currency Conversion
 

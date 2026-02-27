@@ -51,8 +51,8 @@ Dashboard is served by the Python Finance API.
 
 ### 3.1 Core Concepts
 
-- **User**: “fazrin” and magfira (2 participants). Identified by `user_id` and `display_name`.
-- **Account**: Cash, BCA, Jago, etc. Holds a computed balance.
+- **User**: Auto-created from Discord display name on first transaction. Seeded: “fazrin” (Jakarta, UTC+7) and “magfira” (Sydney, UTC+11). Identified by `user_id` and `display_name`.
+- **Account**: Per-user accounts (e.g. `fazrin_BCA`, `magfira_CBA`). Each has an `owner_id`. Holds a computed balance.
 - **Transaction**: Atomic record of money movement (expense, income, transfer).
 - **Budget**: Monthly caps per category (optionally per user).
 - **Category**: Fixed list + configurable (Groceries, Fun, Car, Bills, etc.).
@@ -87,9 +87,10 @@ Dashboard is served by the Python Finance API.
 - created_at (DATETIME)
 
 #### accounts
-- id (TEXT, PK) — e.g., "BCA", "CASH", "JAGO"
+- id (TEXT, PK) — e.g., "fazrin_BCA", "magfira_CBA" (prefixed with owner_id)
 - display_name (TEXT)
 - type (TEXT) — e.g., "bank", "cash", "ewallet"
+- owner_id (TEXT, FK users.id, nullable) — which user owns this account
 - currency (TEXT) — default "IDR"
 - is_active (INTEGER)
 - created_at (DATETIME)
@@ -110,9 +111,9 @@ Dashboard is served by the Python Finance API.
 - updated_at (DATETIME)
 
 #### transactions
-- id (TEXT, PK) — UUID
+- id (INTEGER, PK AUTOINCREMENT) — auto-incrementing integer
 - created_at (DATETIME) — server time
-- effective_at (DATETIME) — when it happened (can default to created_at)
+- effective_at (DATETIME) — when it happened (ISO 8601 with timezone offset; defaults to server now). The Discord bot parses natural language time expressions ("at 5am", "yesterday 3pm", etc.) into this field.
 - user_id (TEXT, FK users.id) — who logged it / who did it
 - transaction_type (TEXT)
 - amount (INTEGER) — positive integer in IDR
@@ -126,7 +127,7 @@ Dashboard is served by the Python Finance API.
 - external_ref (TEXT nullable) — optional id for import
 - note (TEXT nullable)
 - status (TEXT) — e.g., "posted" | "voided" (voided by correction)
-- correction_of (TEXT nullable FK transactions.id) — if this is a correction
+- correction_of (INTEGER nullable FK transactions.id) — if this is a correction
 - metadata_json (TEXT nullable) — JSON string for extra fields
 
 **Rules by type (server validation):**
@@ -227,20 +228,22 @@ Simplest:
   "description": "detergent indomaret",
   "merchant": "Indomaret",
   "payment_method": "qris",
-  "from_account_id": "BCA",
+  "from_account_id": "fazrin_BCA",
   "to_account_id": null,
   "note": "optional",
   "metadata": {
-    "raw_text": "I just spent 65k rupiah on detergent"
+    "raw_text": "beli detergent 65k qris bca at 10.30am"
   }
 }
 ```
 
+`effective_at` accepts ISO 8601 with timezone offset. The Discord bot parses natural language time expressions ("at 5am", "yesterday 3pm", "at 17.30") into this field. If omitted, defaults to server's current time.
+
 Return:
 ```json
 {
-  "transaction": { ...normalized fields... },
-  "balances": [{ "account_id": "BCA", "balance": 12345000 }],
+  "transaction": { "id": 1, ...normalized fields... },
+  "balances": [{ "account_id": "fazrin_BCA", "balance": 12345000 }],
   "budget_status": [
     { "category_id": "groceries", "month": "2026-02", "limit": 3000000, "used": 1200000, "remaining": 1800000, "percent": 0.4, "warning": null }
   ],
@@ -258,9 +261,9 @@ Return:
   - Returns budget usage/remaining + warnings.
 
 #### Accounts
-- `POST /v1/accounts`
-- `GET /v1/accounts`
-- `GET /v1/accounts/balances`
+- `POST /v1/accounts` — include `owner_id` to assign to a user
+- `GET /v1/accounts?user_id=fazrin` — optional `user_id` filter by owner
+- `GET /v1/accounts/balances?user_id=fazrin` — optional `user_id` filter
 - `POST /v1/accounts/{id}/adjust`
   - Adds an adjustment transaction (initial balance or reconciliation).
 
@@ -270,8 +273,8 @@ Return:
 - `DELETE /v1/category-rules/{id}`
 
 #### Summaries / Reports
-- `GET /v1/summary/monthly?month=YYYY-MM`
-  - Returns totals, by category, by user, by account, top merchants, daily totals.
+- `GET /v1/summary/monthly?month=YYYY-MM&user_id=fazrin`
+  - Returns totals, by category, by user, by account, top merchants, daily totals. Optional `user_id` filter for per-user view; omit for household totals.
 
 #### Purchase Advice (Phase 2)
 - `GET /v1/advice/purchase`
