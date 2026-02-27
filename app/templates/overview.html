@@ -3,65 +3,112 @@
 {% block title %}Ledger — Overview{% endblock %}
 
 {% block content %}
-<h1>{{ month }} Overview</h1>
+<div class="page-header">
+  <div>
+    <h1>Overview</h1>
+    <div class="subtitle">{{ month }} Financial Summary</div>
+  </div>
+</div>
 
 {% if summary.warnings %}
 <div class="warnings">
   {% for w in summary.warnings %}
-  <div class="warning-item {{ w.severity.value }}">{{ w.message }}</div>
+  <div class="warning-item {{ w.severity.value }}">
+    <svg style="width:16px;height:16px;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    {{ w.message }}
+  </div>
   {% endfor %}
 </div>
 {% endif %}
 
-<!-- Combined household totals -->
-<h2>Household Total</h2>
-<div class="cards">
-  <div class="card">
-    <div class="label">Total Expenses</div>
-    <div class="value negative">{{ idr(summary.total_expenses) }}</div>
+<div class="section-title">Household Total</div>
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="icon-wrap red">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Total Expenses</div>
+      <div class="stat-value negative">{{ idr(summary.total_expenses) }}</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="label">Total Income</div>
-    <div class="value positive">{{ idr(summary.total_income) }}</div>
+  <div class="stat-card">
+    <div class="icon-wrap green">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Total Income</div>
+      <div class="stat-value positive">{{ idr(summary.total_income) }}</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="label">Net</div>
-    <div class="value {% if summary.net >= 0 %}positive{% else %}negative{% endif %}">{{ idr(summary.net) }}</div>
+  <div class="stat-card">
+    <div class="icon-wrap {% if summary.net >= 0 %}blue{% else %}purple{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Net</div>
+      <div class="stat-value {% if summary.net >= 0 %}positive{% else %}negative{% endif %}">{{ idr(summary.net) }}</div>
+    </div>
   </div>
 </div>
 
-<!-- Per-user sections -->
 {% for pu in per_user %}
 {% if pu.summary.total_expenses > 0 or pu.summary.total_income > 0 or pu.balances %}
-<h2 style="margin-top:2rem;border-bottom:2px solid var(--border);padding-bottom:0.3rem">{{ pu.user.display_name }}</h2>
+<div class="section-title">{{ pu.user.display_name }}</div>
 
-<div class="cards">
-  <div class="card">
-    <div class="label">Expenses</div>
-    <div class="value negative">{{ idr(pu.summary.total_expenses) }}</div>
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="icon-wrap red">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Expenses</div>
+      <div class="stat-value negative">{{ idr(pu.summary.total_expenses) }}</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="label">Income</div>
-    <div class="value positive">{{ idr(pu.summary.total_income) }}</div>
+  <div class="stat-card">
+    <div class="icon-wrap green">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Income</div>
+      <div class="stat-value positive">{{ idr(pu.summary.total_income) }}</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="label">Net</div>
-    <div class="value {% if pu.summary.net >= 0 %}positive{% else %}negative{% endif %}">{{ idr(pu.summary.net) }}</div>
+  <div class="stat-card">
+    <div class="icon-wrap blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Net</div>
+      <div class="stat-value {% if pu.summary.net >= 0 %}positive{% else %}negative{% endif %}">{{ idr(pu.summary.net) }}</div>
+    </div>
   </div>
 </div>
 
 {% if pu.balances %}
-<h3>Accounts</h3>
-<div class="cards">
+<div class="stat-cards" style="margin-bottom:1.75rem">
   {% for b in pu.balances %}
-  <div class="card">
-    <div class="label">{{ b.display_name }}</div>
-    <div class="value {% if b.balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(b.balance) }}</div>
+  <div class="stat-card">
+    <div class="icon-wrap accent">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">{{ b.display_name }}</div>
+      <div class="stat-value {% if b.balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(b.balance) }}</div>
+    </div>
   </div>
   {% endfor %}
-  <div class="card" style="border-left:3px solid var(--border)">
-    <div class="label">Total</div>
-    <div class="value {% if pu.total_balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(pu.total_balance) }}</div>
+  <div class="stat-card" style="border-left:3px solid var(--accent)">
+    <div class="icon-wrap purple">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-label">Total</div>
+      <div class="stat-value {% if pu.total_balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(pu.total_balance) }}</div>
+    </div>
   </div>
 </div>
 {% endif %}
@@ -69,63 +116,75 @@
 {% endfor %}
 
 {% if summary.budget_status %}
-<h2 style="margin-top:2rem">Budget Status</h2>
-<table>
-  <thead><tr><th>Category</th><th>Limit</th><th>Used</th><th>Remaining</th><th>Progress</th></tr></thead>
-  <tbody>
-    {% for b in summary.budget_status %}
-    <tr>
-      <td>{{ b.category_name }}</td>
-      <td class="amount">{{ idr(b.limit) }}</td>
-      <td class="amount">{{ idr(b.used) }}</td>
-      <td class="amount {% if b.remaining < 0 %}type-expense{% endif %}">{{ idr(b.remaining) }}</td>
-      <td style="min-width:120px">
-        {% set pct = (b.percent * 100)|round|int %}
-        {% set cls = "pct-ok" if pct < 80 else ("pct-warn" if pct < 100 else "pct-over") %}
-        <div class="progress-wrap">
-          <div class="progress-bar {{ cls }}" style="width:{{ [pct, 100]|min }}%"></div>
-        </div>
-        <span style="font-size:0.75rem;color:var(--text2)">{{ pct }}%</span>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="section-title">Budget Status</div>
+<div class="panel">
+  <table>
+    <thead><tr><th>Category</th><th>Limit</th><th>Used</th><th>Remaining</th><th style="min-width:140px">Progress</th></tr></thead>
+    <tbody>
+      {% for b in summary.budget_status %}
+      <tr>
+        <td style="font-weight:600">{{ b.category_name }}</td>
+        <td class="amount" style="color:var(--text2)">{{ idr(b.limit) }}</td>
+        <td class="amount">{{ idr(b.used) }}</td>
+        <td class="amount {% if b.remaining < 0 %}type-expense{% endif %}">{{ idr(b.remaining) }}</td>
+        <td>
+          {% set pct = (b.percent * 100)|round|int %}
+          {% set cls = "pct-ok" if pct < 80 else ("pct-warn" if pct < 100 else "pct-over") %}
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="progress-wrap" style="flex:1">
+              <div class="progress-bar {{ cls }}" style="width:{{ [pct, 100]|min }}%"></div>
+            </div>
+            <span style="font-size:0.75rem;font-weight:600;color:var(--text2);min-width:32px">{{ pct }}%</span>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endif %}
 
 {% if summary.by_parent_category %}
-<h2 style="margin-top:2rem">Spending by Category</h2>
-<table>
-  <thead><tr><th>Category</th><th>Amount</th></tr></thead>
-  <tbody>
-    {% for p in summary.by_parent_category %}
-    <tr style="background:var(--surface2)">
-      <td><strong>{{ p.category_name }}</strong></td>
-      <td class="amount type-expense"><strong>{{ idr(p.total) }}</strong></td>
-    </tr>
-    {% for c in p.children %}
-    <tr>
-      <td style="padding-left:2rem;color:var(--text2)">{{ c.category_name }}</td>
-      <td class="amount type-expense" style="color:var(--text2)">{{ idr(c.total) }}</td>
-    </tr>
-    {% endfor %}
-    {% endfor %}
-  </tbody>
-</table>
+<div class="section" style="margin-top:1.75rem">
+  <div class="section-title">Spending by Category</div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody>
+        {% for p in summary.by_parent_category %}
+        <tr style="background:var(--surface-hover)">
+          <td style="font-weight:700">{{ p.category_name }}</td>
+          <td class="amount type-expense" style="text-align:right;font-weight:700">{{ idr(p.total) }}</td>
+        </tr>
+        {% for c in p.children %}
+        <tr>
+          <td style="padding-left:2rem;color:var(--text2)">{{ c.category_name }}</td>
+          <td class="amount" style="text-align:right;color:var(--text2)">{{ idr(c.total) }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endif %}
 
 {% if summary.by_user %}
-<h2 style="margin-top:2rem">Spending by User</h2>
-<table>
-  <thead><tr><th>User</th><th>Amount</th></tr></thead>
-  <tbody>
-    {% for u in summary.by_user %}
-    <tr>
-      <td>{{ u.display_name }}</td>
-      <td class="amount type-expense">{{ idr(u.total) }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="section" style="margin-top:1.75rem">
+  <div class="section-title">Spending by User</div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>User</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody>
+        {% for u in summary.by_user %}
+        <tr>
+          <td style="font-weight:600">{{ u.display_name }}</td>
+          <td class="amount type-expense" style="text-align:right">{{ idr(u.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endif %}
 {% endblock %}

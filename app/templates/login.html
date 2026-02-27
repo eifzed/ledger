@@ -3,104 +3,131 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ledger — Login</title>
+  <title>Ledger — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #0f172a;
-      --surface: #1e293b;
-      --border: #475569;
-      --text: #f1f5f9;
-      --text2: #94a3b8;
-      --accent: #38bdf8;
-      --red: #f87171;
-      --radius: 8px;
-    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1e293b;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
+      -webkit-font-smoothing: antialiased;
     }
-    .login-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+    .login-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.05);
       padding: 2.5rem;
       width: 100%;
-      max-width: 380px;
+      max-width: 400px;
     }
-    .login-box h1 {
-      color: var(--accent);
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 1.75rem;
+    }
+    .login-brand-icon {
+      width: 40px; height: 40px;
+      background: #6366f1;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-brand-icon svg { width: 22px; height: 22px; color: white; }
+    .login-brand-text {
       font-size: 1.5rem;
-      margin-bottom: 0.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
     }
-    .login-box p {
-      color: var(--text2);
-      font-size: 0.85rem;
+    .login-subtitle {
+      color: #64748b;
+      font-size: 0.875rem;
       margin-bottom: 1.5rem;
     }
-    .login-box label {
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
       display: block;
-      font-size: 0.8rem;
-      color: var(--text2);
-      margin-bottom: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      margin-bottom: 6px;
     }
-    .login-box input {
+    .form-group input {
       width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 0.6rem 0.75rem;
-      border-radius: var(--radius);
-      font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-    .login-box input:focus {
+      background: #f8f9fb;
+      border: 1px solid #e5e7eb;
+      color: #1e293b;
+      padding: 0.65rem 0.85rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-family: inherit;
       outline: none;
-      border-color: var(--accent);
+      transition: all 0.15s;
     }
-    .login-box button {
+    .form-group input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px #eef2ff;
+      background: white;
+    }
+    .login-btn {
       width: 100%;
-      background: var(--accent);
-      color: var(--bg);
+      background: #6366f1;
+      color: white;
       border: none;
-      padding: 0.65rem;
-      border-radius: var(--radius);
-      font-size: 0.9rem;
+      padding: 0.7rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
       font-weight: 600;
       cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+      margin-top: 0.5rem;
     }
-    .login-box button:hover { opacity: 0.9; }
+    .login-btn:hover { background: #4f46e5; }
     .error-msg {
-      background: rgba(248, 113, 113, 0.12);
-      color: var(--red);
-      border-left: 3px solid var(--red);
-      padding: 0.5rem 0.75rem;
-      border-radius: var(--radius);
+      background: #fef2f2;
+      color: #991b1b;
+      border-left: 3px solid #ef4444;
+      padding: 0.6rem 0.85rem;
+      border-radius: 8px;
       margin-bottom: 1rem;
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
     }
   </style>
 </head>
 <body>
-  <div class="login-box">
-    <h1>Ledger</h1>
-    <p>Sign in to access the dashboard</p>
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 8h20"/><path d="M2 13h20"/>
+        </svg>
+      </div>
+      <span class="login-brand-text">Ledger</span>
+    </div>
+    <p class="login-subtitle">Sign in to access the dashboard</p>
     {% if error %}
     <div class="error-msg">{{ error }}</div>
     {% endif %}
     <form method="post" action="/login">
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" required autofocus>
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" required>
-      <button type="submit">Sign In</button>
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <button class="login-btn" type="submit">Sign In</button>
     </form>
   </div>
 </body>
