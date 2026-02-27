@@ -5,6 +5,9 @@
 {% block content %}
 <h1>Accounts</h1>
 
+{% for pu in per_user_accounts %}
+{% if pu.accounts %}
+<h2 style="margin-top:1.5rem;border-bottom:2px solid var(--border);padding-bottom:0.3rem">{{ pu.user.display_name }}</h2>
 <table>
   <thead>
     <tr>
@@ -15,7 +18,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for a in accts %}
+    {% for a in pu.accounts %}
     <tr>
       <td><strong>{{ a.display_name }}</strong> <span style="color:var(--text2);font-size:0.8em">({{ a.id }})</span></td>
       <td>{{ a.type }}</td>
@@ -25,17 +28,57 @@
       </td>
     </tr>
     {% endfor %}
-    {% if not accts %}
-    <tr><td colspan="4" style="text-align:center;color:var(--text2);padding:2rem">No accounts yet.</td></tr>
-    {% endif %}
+    <tr style="background:var(--surface2)">
+      <td colspan="3"><strong>Subtotal</strong></td>
+      <td class="amount {% if pu.total >= 0 %}positive{% else %}negative{% endif %}" style="font-size:1.1em">
+        <strong>{{ idr(pu.total) }}</strong>
+      </td>
+    </tr>
   </tbody>
 </table>
+{% endif %}
+{% endfor %}
 
-{% set total = balance_map.values()|sum %}
+{% if shared_accts %}
+<h2 style="margin-top:1.5rem;border-bottom:2px solid var(--border);padding-bottom:0.3rem">Shared</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Account</th>
+      <th>Type</th>
+      <th>Currency</th>
+      <th>Balance</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in shared_accts %}
+    <tr>
+      <td><strong>{{ a.display_name }}</strong> <span style="color:var(--text2);font-size:0.8em">({{ a.id }})</span></td>
+      <td>{{ a.type }}</td>
+      <td>{{ a.currency }}</td>
+      <td class="amount {% if balance_map.get(a.id, 0) >= 0 %}positive{% else %}negative{% endif %}" style="font-size:1.1em">
+        {{ idr(balance_map.get(a.id, 0)) }}
+      </td>
+    </tr>
+    {% endfor %}
+    <tr style="background:var(--surface2)">
+      <td colspan="3"><strong>Subtotal</strong></td>
+      <td class="amount {% if shared_total >= 0 %}positive{% else %}negative{% endif %}" style="font-size:1.1em">
+        <strong>{{ idr(shared_total) }}</strong>
+      </td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% if not accts %}
+<p style="text-align:center;color:var(--text2);padding:2rem">No accounts yet.</p>
+{% endif %}
+
 <div class="cards" style="margin-top:1.5rem">
   <div class="card">
-    <div class="label">Total Net Worth</div>
-    <div class="value {% if total >= 0 %}positive{% else %}negative{% endif %}">{{ idr(total) }}</div>
+    <div class="label">Household Net Worth</div>
+    <div class="value {% if grand_total >= 0 %}positive{% else %}negative{% endif %}">{{ idr(grand_total) }}</div>
   </div>
 </div>
 {% endblock %}

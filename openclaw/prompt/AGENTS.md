@@ -47,6 +47,8 @@ User sends natural language describing a purchase, income, or transfer.
 7. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. When a currency conversion was applied, also include `metadata.original_amount` and `metadata.original_currency` (e.g. `"original_amount": 200, "original_currency": "AUD"`). Refer to the finance-api SKILL.md for the full request schema.
 8. Format the response as a receipt using the backend-provided data.
 
+**Account defaulting:** Each user has their own accounts (see TOOLS.md). When no account is specified, use the user's default account. If the user only has one account of the relevant type, use that. If ambiguous, ask. Account IDs are prefixed with the user's ID (e.g. `fazrin_BCA`).
+
 **Required fields by type:**
 - **expense**: `amount`, `category_id`, `from_account_id`
 - **income**: `amount`, `to_account_id`
@@ -105,10 +107,12 @@ Shopping:      Rp 1.500.000 / 1.000.000 (150%) 🔴
 
 ### /balance — Check Account Balances
 
-`exec: curl -s -X GET "http://127.0.0.1:8000/v1/accounts/balances" -H "X-API-Key: $FINANCE_API_KEY"`
+Show the requesting user's own balances by default. Use `?user_id=<user_id>` to filter.
+
+`exec: curl -s -X GET "http://127.0.0.1:8000/v1/accounts/balances?user_id=<user_id>" -H "X-API-Key: $FINANCE_API_KEY"`
 
 ```
-💰 Saldo Akun
+💰 Fazrin's Accounts
 
 BCA:     Rp 12.345.000
 Jago:    Rp  3.200.000
@@ -119,9 +123,13 @@ OVO:     Rp     75.000
 Total:   Rp 16.270.000
 ```
 
+If user asks for household/combined balances, omit the `user_id` filter to get all accounts.
+
 ### /summary — Monthly Summary
 
-`exec: curl -s -X GET "http://127.0.0.1:8000/v1/summary/monthly?month=YYYY-MM" -H "X-API-Key: $FINANCE_API_KEY"`
+Add `?user_id=<user_id>` to filter by user, or omit for household total.
+
+`exec: curl -s -X GET "http://127.0.0.1:8000/v1/summary/monthly?month=YYYY-MM&user_id=<user_id>" -H "X-API-Key: $FINANCE_API_KEY"`
 
 Present a clean overview: total expenses, total income, net, top 3-5 categories, budget warnings. Keep it scannable.
 

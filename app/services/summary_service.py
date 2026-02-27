@@ -18,25 +18,29 @@ from app.schemas import (
 from app.services import budget_service
 
 
-def monthly_summary(db: Session, month: str) -> MonthlySummary:
+def monthly_summary(db: Session, month: str, user_id: str | None = None) -> MonthlySummary:
     posted = Transaction.status == "posted"
     in_month = func.strftime("%Y-%m", Transaction.effective_at) == month
 
+    base_filters = [posted, in_month]
+    if user_id:
+        base_filters.append(Transaction.user_id == user_id)
+
     total_expenses = int(
         db.query(func.coalesce(func.sum(Transaction.amount), 0))
-        .filter(posted, in_month, Transaction.transaction_type == "expense")
+        .filter(*base_filters, Transaction.transaction_type == "expense")
         .scalar()
     )
 
     total_income = int(
         db.query(func.coalesce(func.sum(Transaction.amount), 0))
-        .filter(posted, in_month, Transaction.transaction_type == "income")
+        .filter(*base_filters, Transaction.transaction_type == "income")
         .scalar()
     )
 
     by_category_rows = (
         db.query(Transaction.category_id, func.sum(Transaction.amount).label("total"))
-        .filter(posted, in_month, Transaction.transaction_type == "expense", Transaction.category_id.isnot(None))
+        .filter(*base_filters, Transaction.transaction_type == "expense", Transaction.category_id.isnot(None))
         .group_by(Transaction.category_id)
         .order_by(func.sum(Transaction.amount).desc())
         .all()
@@ -54,7 +58,7 @@ def monthly_summary(db: Session, month: str) -> MonthlySummary:
 
     by_user_rows = (
         db.query(Transaction.user_id, func.sum(Transaction.amount).label("total"))
-        .filter(posted, in_month, Transaction.transaction_type == "expense")
+        .filter(*base_filters, Transaction.transaction_type == "expense")
         .group_by(Transaction.user_id)
         .order_by(func.sum(Transaction.amount).desc())
         .all()
@@ -73,7 +77,7 @@ def monthly_summary(db: Session, month: str) -> MonthlySummary:
             func.strftime("%Y-%m-%d", Transaction.effective_at).label("date"),
             func.sum(Transaction.amount).label("total"),
         )
-        .filter(posted, in_month, Transaction.transaction_type == "expense")
+        .filter(*base_filters, Transaction.transaction_type == "expense")
         .group_by(func.strftime("%Y-%m-%d", Transaction.effective_at))
         .order_by("date")
         .all()
@@ -82,7 +86,7 @@ def monthly_summary(db: Session, month: str) -> MonthlySummary:
 
     merchant_rows = (
         db.query(Transaction.merchant, func.sum(Transaction.amount).label("total"), func.count().label("count"))
-        .filter(posted, in_month, Transaction.transaction_type == "expense", Transaction.merchant.isnot(None))
+        .filter(*base_filters, Transaction.transaction_type == "expense", Transaction.merchant.isnot(None))
         .group_by(Transaction.merchant)
         .order_by(func.sum(Transaction.amount).desc())
         .limit(10)

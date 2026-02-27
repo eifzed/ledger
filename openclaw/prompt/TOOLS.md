@@ -7,13 +7,21 @@
 
 ## Accounts
 
-| ID | Name | Type |
-|---|---|---|
-| `BCA` | BCA | bank |
-| `JAGO` | Jago | bank |
-| `CASH` | Cash | cash |
-| `GOPAY` | GoPay | ewallet |
-| `OVO` | OVO | ewallet |
+Each user has their own accounts. Account IDs are prefixed with the user's ID:
+
+| ID | Name | Type | Owner |
+|---|---|---|---|
+| `fazrin_BCA` | BCA | bank | fazrin |
+| `fazrin_JAGO` | Jago | bank | fazrin |
+| `fazrin_CASH` | Cash | cash | fazrin |
+| `fazrin_GOPAY` | GoPay | ewallet | fazrin |
+| `fazrin_OVO` | OVO | ewallet | fazrin |
+| `magfira_CBA` | CBA | bank | magfira |
+| `magfira_CASH` | Cash | cash | magfira |
+
+When a user logs a transaction, **default to their own accounts** (matching by owner_id). Call `GET /v1/accounts?user_id=<user_id>` to see the user's accounts.
+
+New users won't have accounts yet — ask them to create one or just ask which account they want to use.
 
 If the user says QRIS, the *payment_method* is `qris` — but you still need to know which account was charged.
 

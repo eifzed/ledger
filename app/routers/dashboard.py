@@ -119,14 +119,28 @@ async def overview(request: Request, db: Session = Depends(get_db)):
 
     month = now_jakarta().strftime("%Y-%m")
     summary = summary_service.monthly_summary(db, month)
-    balances = account_service.compute_balances(db)
+    all_balances = account_service.compute_balances(db)
+
+    db_users = db.query(User).order_by(User.display_name).all()
+    per_user = []
+    for u in db_users:
+        user_summary = summary_service.monthly_summary(db, month, user_id=u.id)
+        user_balances = [b for b in all_balances if b.owner_id == u.id]
+        user_total = sum(b.balance for b in user_balances)
+        per_user.append({
+            "user": u,
+            "summary": user_summary,
+            "balances": user_balances,
+            "total_balance": user_total,
+        })
 
     return templates.TemplateResponse("overview.html", {
         "request": request,
         **_common_ctx(db),
         "month": month,
         "summary": summary,
-        "balances": balances,
+        "balances": all_balances,
+        "per_user": per_user,
     })
 
 
@@ -256,9 +270,28 @@ async def accounts_page(request: Request, db: Session = Depends(get_db)):
     balances = account_service.compute_balances(db)
     balance_map = {b.account_id: b.balance for b in balances}
 
+    db_users = db.query(User).order_by(User.display_name).all()
+    per_user_accounts = []
+    for u in db_users:
+        user_accts = [a for a in accts if a.owner_id == u.id]
+        user_total = sum(balance_map.get(a.id, 0) for a in user_accts)
+        per_user_accounts.append({
+            "user": u,
+            "accounts": user_accts,
+            "total": user_total,
+        })
+
+    shared_accts = [a for a in accts if a.owner_id is None]
+    shared_total = sum(balance_map.get(a.id, 0) for a in shared_accts)
+    grand_total = sum(balance_map.values())
+
     return templates.TemplateResponse("accounts.html", {
         "request": request,
         **_common_ctx(db),
         "accts": accts,
         "balance_map": balance_map,
+        "per_user_accounts": per_user_accounts,
+        "shared_accts": shared_accts,
+        "shared_total": shared_total,
+        "grand_total": grand_total,
     })

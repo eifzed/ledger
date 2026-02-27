@@ -33,8 +33,11 @@ class Account(Base):
     display_name = Column(String, nullable=False)
     type = Column(String, nullable=False)  # bank, cash, ewallet
     currency = Column(String, default="IDR", nullable=False)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
     is_active = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    owner = relationship("User", backref="accounts")
 
 
 class Category(Base):

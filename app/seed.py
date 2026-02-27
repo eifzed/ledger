@@ -108,13 +108,16 @@ def _seed_categories(db: Session) -> None:
 
 
 def _seed_accounts(db: Session) -> None:
+    # (id, display_name, type, owner_id)
     defaults = [
-        ("BCA", "BCA", "bank"),
-        ("JAGO", "Jago", "bank"),
-        ("CASH", "Cash", "cash"),
-        ("GOPAY", "GoPay", "ewallet"),
-        ("OVO", "OVO", "ewallet"),
+        ("fazrin_BCA", "BCA", "bank", "fazrin"),
+        ("fazrin_JAGO", "Jago", "bank", "fazrin"),
+        ("fazrin_CASH", "Cash", "cash", "fazrin"),
+        ("fazrin_GOPAY", "GoPay", "ewallet", "fazrin"),
+        ("fazrin_OVO", "OVO", "ewallet", "fazrin"),
+        ("magfira_CBA", "CBA", "bank", "magfira"),
+        ("magfira_CASH", "Cash", "cash", "magfira"),
     ]
-    for aid, name, atype in defaults:
+    for aid, name, atype, owner in defaults:
         if not db.query(Account).filter(Account.id == aid).first():
-            db.add(Account(id=aid, display_name=name, type=atype))
+            db.add(Account(id=aid, display_name=name, type=atype, owner_id=owner))

@@ -15,8 +15,9 @@ router = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
 @router.get("/summary/monthly", response_model=MonthlySummary)
 async def get_monthly_summary(
     month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    user_id: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     if not month:
         month = now_jakarta().strftime("%Y-%m")
-    return summary_service.monthly_summary(db, month)
+    return summary_service.monthly_summary(db, month, user_id=user_id)

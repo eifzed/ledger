@@ -13,6 +13,8 @@
 </div>
 {% endif %}
 
+<!-- Combined household totals -->
+<h2>Household Total</h2>
 <div class="cards">
   <div class="card">
     <div class="label">Total Expenses</div>
@@ -28,21 +30,46 @@
   </div>
 </div>
 
-<h2>Account Balances</h2>
+<!-- Per-user sections -->
+{% for pu in per_user %}
+{% if pu.summary.total_expenses > 0 or pu.summary.total_income > 0 or pu.balances %}
+<h2 style="margin-top:2rem;border-bottom:2px solid var(--border);padding-bottom:0.3rem">{{ pu.user.display_name }}</h2>
+
 <div class="cards">
-  {% for b in balances %}
+  <div class="card">
+    <div class="label">Expenses</div>
+    <div class="value negative">{{ idr(pu.summary.total_expenses) }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Income</div>
+    <div class="value positive">{{ idr(pu.summary.total_income) }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Net</div>
+    <div class="value {% if pu.summary.net >= 0 %}positive{% else %}negative{% endif %}">{{ idr(pu.summary.net) }}</div>
+  </div>
+</div>
+
+{% if pu.balances %}
+<h3>Accounts</h3>
+<div class="cards">
+  {% for b in pu.balances %}
   <div class="card">
     <div class="label">{{ b.display_name }}</div>
     <div class="value {% if b.balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(b.balance) }}</div>
   </div>
   {% endfor %}
-  {% if not balances %}
-  <div class="card"><div class="label">No accounts yet</div></div>
-  {% endif %}
+  <div class="card" style="border-left:3px solid var(--border)">
+    <div class="label">Total</div>
+    <div class="value {% if pu.total_balance >= 0 %}positive{% else %}negative{% endif %}">{{ idr(pu.total_balance) }}</div>
+  </div>
 </div>
+{% endif %}
+{% endif %}
+{% endfor %}
 
 {% if summary.budget_status %}
-<h2>Budget Status</h2>
+<h2 style="margin-top:2rem">Budget Status</h2>
 <table>
   <thead><tr><th>Category</th><th>Limit</th><th>Used</th><th>Remaining</th><th>Progress</th></tr></thead>
   <tbody>

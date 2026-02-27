@@ -78,6 +78,7 @@ class AccountCreate(BaseModel):
     display_name: str = Field(..., min_length=1)
     type: AccountType
     currency: str = "IDR"
+    owner_id: str | None = None
 
 
 class AccountOut(BaseModel):
@@ -85,6 +86,7 @@ class AccountOut(BaseModel):
     display_name: str
     type: str
     currency: str
+    owner_id: str | None = None
     is_active: bool
     created_at: datetime
 
@@ -94,6 +96,7 @@ class AccountOut(BaseModel):
 class AccountBalance(BaseModel):
     account_id: str
     display_name: str
+    owner_id: str | None = None
     balance: int
 
 

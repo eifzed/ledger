@@ -31,13 +31,15 @@ curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_
   "transaction_type": "expense",
   "amount": 65000,
   "category_id": "groceries",
-  "from_account_id": "BCA",
+  "from_account_id": "fazrin_BCA",
   "description": "detergent",
   "merchant": "Indomaret",
   "payment_method": "qris",
   "metadata": {"raw_text": "beli detergent 65k qris bca"}
 }'
 ```
+
+Account IDs are per-user (e.g. `fazrin_BCA`, `magfira_CBA`). Use `GET /v1/accounts?user_id=<user_id>` to see the user's accounts.
 
 **Required fields by type:**
 - **expense**: `user_id`, `transaction_type`, `amount`, `category_id`, `from_account_id` (`to_account_id` must be null)
@@ -123,30 +125,34 @@ curl -s -X GET "http://127.0.0.1:8000/v1/budgets/history?month=2026-02&limit=50"
 
 ## Accounts
 
+Accounts are per-user. Each account has an `owner_id` field. Use `?user_id=` to filter.
+
 ### Get balances
 
 ```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/accounts/balances" -H "X-API-Key: $FINANCE_API_KEY"
+curl -s -X GET "http://127.0.0.1:8000/v1/accounts/balances?user_id=fazrin" -H "X-API-Key: $FINANCE_API_KEY"
 ```
+
+Omit `user_id` for all accounts (household view).
 
 ### List accounts
 
 ```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY"
+curl -s -X GET "http://127.0.0.1:8000/v1/accounts?user_id=fazrin" -H "X-API-Key: $FINANCE_API_KEY"
 ```
 
 ### Create account
 
 ```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"id": "DANA", "display_name": "Dana", "type": "ewallet"}'
+curl -s -X POST "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"id": "fazrin_DANA", "display_name": "Dana", "type": "ewallet", "owner_id": "fazrin"}'
 ```
 
-Types: `bank`, `cash`, `ewallet`, `credit_card`, `other`.
+Types: `bank`, `cash`, `ewallet`, `credit_card`, `other`. Always set `owner_id` to the user who owns the account.
 
 ### Adjust balance
 
 ```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/accounts/BCA/adjust" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"amount": 5000000, "user_id": "fazrin", "note": "Initial balance"}'
+curl -s -X POST "http://127.0.0.1:8000/v1/accounts/fazrin_BCA/adjust" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"amount": 5000000, "user_id": "fazrin", "note": "Initial balance"}'
 ```
 
 Positive = credit, negative = debit.
@@ -158,8 +164,10 @@ Positive = credit, negative = debit.
 ### Monthly summary
 
 ```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/summary/monthly?month=2026-02" -H "X-API-Key: $FINANCE_API_KEY"
+curl -s -X GET "http://127.0.0.1:8000/v1/summary/monthly?month=2026-02&user_id=fazrin" -H "X-API-Key: $FINANCE_API_KEY"
 ```
+
+Omit `user_id` for household-wide summary.
 
 Returns: `total_expenses`, `total_income`, `net`, `by_category`, `by_user`, `daily_totals`, `top_merchants`, `budget_status`, `warnings`.
 
