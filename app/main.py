@@ -14,7 +14,7 @@ from app.errors import (
     ledger_http_handler,
     needs_clarification_handler,
 )
-from app.routers import accounts, budgets, health, meta, summary, transactions
+from app.routers import accounts, budgets, convert, health, meta, summary, transactions
 from app.routers.dashboard import router as dashboard_router
 from app.seed import seed_defaults
 
@@ -65,4 +65,5 @@ app.include_router(transactions.router)
 app.include_router(budgets.router)
 app.include_router(accounts.router)
 app.include_router(summary.router)
+app.include_router(convert.router)
 app.include_router(dashboard_router)

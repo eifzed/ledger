@@ -73,9 +73,9 @@ The 🕐 line: show when a specific time was given or when the date is not today
 
 Include budget lines only if the backend returns them. Show warnings (⚠️ 80%+, 🔴 exceeded).
 
-When a currency conversion was applied, add a line showing the original amount and rate:
+When a currency conversion was applied, add a line showing the original amount, the exact rate from the API, and the result:
 ```
-💱 200 AUD × 10.250 = Rp 2.050.000
+💱 788 AUD × 11,951.70 = Rp 9.417.939
 ```
 
 ### /revise — Correct or Void a Transaction
@@ -197,17 +197,20 @@ When `effective_at` is today but a specific time was given, still show it. **Alw
 
 ## Foreign Currency Conversion
 
-When a user specifies an amount in a non-IDR currency (e.g. "spent 200 AUD", "earned 500 USD"), fetch the live exchange rate and convert to IDR before logging.
+When a user specifies an amount in a non-IDR currency (e.g. "spent 200 AUD", "earned 500 USD"), use the backend's `/v1/convert` endpoint to get the exact IDR amount.
 
 **Steps:**
 1. Detect the currency code from the message (AUD, USD, SGD, EUR, etc.).
-2. Fetch the rate: `exec: curl -s "https://open.er-api.com/v6/latest/IDR"` — this returns rates relative to IDR. To convert, use: `amount_idr = foreign_amount / rates[currency_code]`. Alternatively: `exec: curl -s "https://open.er-api.com/v6/latest/<CURRENCY>"` and multiply by the IDR rate.
-3. Round the result to the nearest integer (IDR has no decimals).
-4. Log the transaction with the converted IDR amount.
-5. Store `original_amount` and `original_currency` in `metadata`.
-6. Show the conversion in the receipt (see receipt format above).
+2. Call the convert endpoint:
+   ```
+   exec: curl -s -X GET "http://127.0.0.1:8000/v1/convert?amount=788&from=AUD" -H "X-API-Key: $FINANCE_API_KEY"
+   ```
+   Response: `{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.698729, "result": 9417938}`
+3. Use the `result` as the transaction `amount`. **Never calculate the conversion yourself.**
+4. Store `original_amount`, `original_currency`, and `exchange_rate` in `metadata`.
+5. Show the conversion in the receipt (see receipt format above).
 
-The exchange rate API is free and requires no API key.
+This also works for setting budgets in foreign currencies — convert first, then set the budget with the IDR result.
 
 ## Clarification Rules
 

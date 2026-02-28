@@ -179,6 +179,16 @@ curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"
 
 Returns all categories, accounts, users, payment methods, transaction types, and server time. Call this to discover valid IDs.
 
+### Currency conversion
+
+```bash
+curl -s -X GET "http://127.0.0.1:8000/v1/convert?amount=788&from=AUD" -H "X-API-Key: $FINANCE_API_KEY"
+```
+
+Query params: `amount` (required), `from` (required, 3-letter currency code), `to` (optional, default IDR).
+
+Response: `{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.698729, "result": 9417938}`. Use `result` directly as the IDR amount — never calculate it yourself.
+
 ### Health check
 
 ```bash
