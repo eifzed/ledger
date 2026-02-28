@@ -259,7 +259,7 @@ OpenClaw builds a system prompt by injecting these Markdown files into the agent
 
 | File | Purpose |
 |------|---------|
-| `AGENTS.md` | The main instruction set. Defines how to call the API (always `exec` with `curl`), slash command behavior (`/log`, `/budget`, `/balance`, `/summary`, `/revise`), time parsing rules, foreign currency conversion, clarification rules, formatting rules, and safety constraints. |
+| `AGENTS.md` | The main instruction set. Defines how to call the API (always `exec` with `curl`), natural language intent detection (recording, revising, balances, budgets, summaries), time parsing rules, foreign currency conversion via `/v1/convert`, clarification rules, formatting rules, and safety constraints. No slash commands — the bot understands plain language. |
 | `IDENTITY.md` | Bot name ("Ledger"), persona, and emoji. |
 | `SOUL.md` | Behavioral guide: be precise with money, casual with words, proactive but not annoying. Defines language style and hard boundaries. |
 | `USER.md` | User handling: auto-creation from Discord display names, default currency (IDR), known household members with timezones (Fazrin in Jakarta UTC+7, Magfira in Sydney UTC+11). |
