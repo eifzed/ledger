@@ -13,14 +13,14 @@ from app.models import Account, Category, Transaction, User
 from app.schemas import ErrorDetail, TransactionCreate, TransactionType
 from app.services import account_service, budget_service
 from app.services.budget_service import get_category_family
-from app.tz import now_jakarta
+from app.tz import col_as_jakarta, now_utc, to_jakarta, to_utc
 
 
 def create_transaction(db: Session, data: TransactionCreate) -> dict:
     _validate_references(db, data)
 
-    effective = data.effective_at or now_jakarta()
-    month = effective.strftime("%Y-%m")
+    effective = to_utc(data.effective_at) if data.effective_at else now_utc()
+    month = to_jakarta(effective).strftime("%Y-%m")
 
     txn = Transaction(
         effective_at=effective,
@@ -70,7 +70,7 @@ def list_transactions(
     q = db.query(Transaction).filter(Transaction.status == "posted")
 
     if month:
-        q = q.filter(func.strftime("%Y-%m", Transaction.effective_at) == month)
+        q = q.filter(func.strftime("%Y-%m", col_as_jakarta(Transaction.effective_at)) == month)
     if category_id:
         family = get_category_family(db, category_id)
         q = q.filter(Transaction.category_id.in_(family))
@@ -119,7 +119,7 @@ def correct_transaction(db: Session, txn_id: int, data: TransactionCreate) -> di
     db.flush()
 
     _validate_references(db, data)
-    effective = data.effective_at or now_jakarta()
+    effective = to_utc(data.effective_at) if data.effective_at else now_utc()
 
     new_txn = Transaction(
         effective_at=effective,
@@ -142,7 +142,7 @@ def correct_transaction(db: Session, txn_id: int, data: TransactionCreate) -> di
     db.commit()
     db.refresh(new_txn)
 
-    month = effective.strftime("%Y-%m")
+    month = to_jakarta(effective).strftime("%Y-%m")
     balances = account_service.compute_balances(db)
     category_ids = [data.category_id] if data.category_id else []
     budget_items, warnings = budget_service.compute_budget_status_for_categories(db, month, category_ids)

@@ -16,11 +16,12 @@ from app.schemas import (
     UserSpend,
 )
 from app.services import budget_service
+from app.tz import col_as_jakarta
 
 
 def monthly_summary(db: Session, month: str, user_id: str | None = None) -> MonthlySummary:
     posted = Transaction.status == "posted"
-    in_month = func.strftime("%Y-%m", Transaction.effective_at) == month
+    in_month = func.strftime("%Y-%m", col_as_jakarta(Transaction.effective_at)) == month
 
     base_filters = [posted, in_month]
     if user_id:
@@ -72,13 +73,14 @@ def monthly_summary(db: Session, month: str, user_id: str | None = None) -> Mont
             total=int(row.total),
         ))
 
+    jkt_effective = col_as_jakarta(Transaction.effective_at)
     daily_rows = (
         db.query(
-            func.strftime("%Y-%m-%d", Transaction.effective_at).label("date"),
+            func.strftime("%Y-%m-%d", jkt_effective).label("date"),
             func.sum(Transaction.amount).label("total"),
         )
         .filter(*base_filters, Transaction.transaction_type == "expense")
-        .group_by(func.strftime("%Y-%m-%d", Transaction.effective_at))
+        .group_by(func.strftime("%Y-%m-%d", jkt_effective))
         .order_by("date")
         .all()
     )

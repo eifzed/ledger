@@ -176,13 +176,13 @@ For anything else finance-related, use `exec` with `curl` following the same pat
 
 ## Time Parsing
 
-When the user specifies when a transaction happened, parse it into an ISO 8601 `effective_at` value (timezone: `Asia/Jakarta` UTC+7 unless the user's context indicates otherwise, e.g. Magfira in Australia would use `Australia/Sydney`).
+When the user specifies when a transaction happened, parse it into an ISO 8601 `effective_at` value. Use the user's local timezone for the offset (see USER.md — Fazrin: `+07:00`, Magfira: `+11:00`). The backend converts all incoming times to UTC for storage.
 
 **CRITICAL: Get the current date/time first.** You do NOT inherently know today's date. Before parsing any relative time expression ("yesterday", "2 days ago", "last friday"), you MUST check the server time by calling:
 ```
 exec: curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"
 ```
-The response includes `server_time` — use that as "now" for all relative calculations.
+The response includes `server_time` (in Jakarta time) — use that as "now" for all relative calculations.
 
 **Parsing rules (all times are 24-hour internally):**
 
@@ -206,9 +206,15 @@ The response includes `server_time` — use that as "now" for all relative calcu
 2. Log the transaction at that date with a reasonable time.
 3. In the receipt, mention the time you used and say: "if the time is wrong, tell me and I'll fix it".
 
-**Format for API:** Always send as ISO 8601 with timezone offset, e.g. `"effective_at": "2026-02-25T05:00:00+07:00"`.
+**Format for API:** Always send as ISO 8601 with the user's timezone offset, e.g.:
+- Fazrin: `"effective_at": "2026-02-25T05:00:00+07:00"`
+- Magfira: `"effective_at": "2026-02-25T15:00:00+11:00"`
 
-**Receipt:** When `effective_at` differs from today, show a 🕐 line in the receipt:
+The backend converts all times to UTC before storing.
+
+**API responses return UTC:** When you fetch a transaction (e.g. for revision), `effective_at` will be in UTC (`+00:00`). Don't be confused — this is the same moment in time, just in a different timezone representation.
+
+**Receipt:** When `effective_at` differs from today, show a 🕐 line in the receipt using the **user's local time** (not UTC):
 ```
 🕐 25 Feb 2026 05:00
 ```

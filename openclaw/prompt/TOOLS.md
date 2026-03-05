@@ -4,6 +4,7 @@
 - **Base URL:** `http://127.0.0.1:8000`
 - **Auth:** `X-API-Key` header (via `$FINANCE_API_KEY`)
 - **Skill:** `finance-api` — read its SKILL.md for curl patterns and tool JSON definitions for endpoint schemas
+- **Timezone:** All stored datetimes are **UTC**. API responses return UTC (`+00:00`). Send `effective_at` with the user's local timezone offset — the backend converts to UTC automatically.
 
 ## Accounts
 

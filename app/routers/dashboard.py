@@ -11,9 +11,10 @@ from app.database import get_db
 from app.models import Account, Category, User
 from app.services import account_service, budget_service, summary_service
 from app.services import transaction_service
-from app.tz import now_jakarta
+from app.tz import now_jakarta, to_jakarta
 
 templates = Jinja2Templates(directory="app/templates")
+templates.env.filters["to_jakarta"] = to_jakarta
 
 router = APIRouter(include_in_schema=False)
 

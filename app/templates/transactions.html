@@ -75,7 +75,7 @@
       {% for t in txns %}
       <tr>
         <td style="color:var(--text3);font-size:0.75rem">{{ t.id }}</td>
-        <td style="white-space:nowrap;color:var(--text2)">{{ t.effective_at.strftime('%d %b %H:%M') }}</td>
+        <td style="white-space:nowrap;color:var(--text2)">{{ (t.effective_at|to_jakarta).strftime('%d %b %H:%M') }}</td>
         <td><span class="badge badge-{{ t.transaction_type }}">{{ t.transaction_type }}</span></td>
         <td>
           <span style="font-weight:500">{{ t.description or '—' }}</span>

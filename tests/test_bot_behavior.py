@@ -45,7 +45,7 @@ TRANSACTION_RESPONSE = '''{
         "amount": 300000, "category_id": "groceries",
         "from_account_id": "fazrin_JAGO", "to_account_id": null,
         "description": "groceries", "merchant": "Alfamart",
-        "payment_method": null, "effective_at": "2026-02-25T14:30:00+07:00",
+        "payment_method": null, "effective_at": "2026-02-25T07:30:00+00:00",
         "metadata": {"raw_text": "spent 300k on groceries at alfamart via jago"},
         "status": "posted"
     },
@@ -427,9 +427,10 @@ class TestTimeParsing:
 
 
 class TestTimezone:
-    """Magfira's times should use Australia/Sydney (+11:00), not Jakarta (+07:00)."""
+    """Timezone handling: each user gets their own offset, API returns UTC."""
 
     def test_magfira_timezone(self, llm, system_prompt):
+        """Magfira's times should use Australia/Sydney (+11:00)."""
         resp = ask_multi(
             llm,
             system_prompt,
@@ -441,6 +442,90 @@ class TestTimezone:
             ea = body["effective_at"]
             assert "+11:00" in ea or "+11" in ea, (
                 f"Magfira should use Australia/Sydney timezone, got {ea}"
+            )
+
+    def test_fazrin_uses_jakarta_timezone(self, llm, system_prompt):
+        """Fazrin's times should use Asia/Jakarta (+07:00)."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Fazrin] bought coffee 15k via cash at 9am",
+            fake_responses=STANDARD_FAKES,
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+07:00" in ea or "+07" in ea, (
+                f"Fazrin should use Asia/Jakarta timezone, got {ea}"
+            )
+
+    def test_magfira_yesterday_uses_sydney_offset(self, llm, system_prompt):
+        """Relative time ('yesterday') for Magfira should still carry +11:00."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Magfira] bought groceries 30k via cash yesterday 2pm",
+            fake_responses={
+                "/v1/meta": META_RESPONSE,
+                "/v1/accounts": MAGFIRA_ACCOUNTS,
+                "/v1/transactions": TRANSACTION_RESPONSE,
+            },
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+11:00" in ea or "+11" in ea, (
+                f"Magfira's relative time should use Sydney offset, got {ea}"
+            )
+            assert "2026-02-24" in ea, (
+                f"Yesterday from Feb 25 should be Feb 24, got {ea}"
+            )
+
+    def test_unknown_user_defaults_to_jakarta(self, llm, system_prompt):
+        """Unknown users should default to Jakarta timezone (+07:00)."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Budi] spent 25k on parking via cash at 8am",
+            fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+07:00" in ea or "+07" in ea, (
+                f"Unknown user should default to Jakarta timezone, got {ea}"
+            )
+
+    def test_revision_with_utc_response(self, llm, system_prompt):
+        """When the bot reads back a UTC effective_at from the API during a revision,
+        it should not be confused and should correctly apply the new time with the
+        user's local offset."""
+        utc_txn = '''{
+            "id": 5, "user_id": "magfira", "transaction_type": "expense",
+            "amount": 30000, "category_id": "groceries",
+            "from_account_id": "magfira_CASH", "to_account_id": null,
+            "description": "groceries", "merchant": null,
+            "payment_method": null, "effective_at": "2026-02-25T04:00:00+00:00",
+            "metadata": {}, "status": "posted"
+        }'''
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Magfira] fix #5 should be 6pm",
+            fake_responses={
+                "/v1/meta": META_RESPONSE,
+                "/v1/transactions/5": utc_txn,
+                "/v1/transactions/5/correct": TRANSACTION_RESPONSE,
+            },
+        )
+        body = resp.find_body("POST", "/v1/transactions/5/correct")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+11:00" in ea or "+11" in ea, (
+                f"Magfira's revised time should use Sydney offset, got {ea}"
+            )
+            assert "18:00" in ea or "T18:" in ea, (
+                f"6pm should be 18:00 local, got {ea}"
             )
 
 
@@ -527,7 +612,7 @@ GET_TXN_1_RESPONSE = '''{
     "amount": 300000, "category_id": "groceries",
     "from_account_id": "fazrin_JAGO", "to_account_id": null,
     "description": "groceries", "merchant": "Alfamart",
-    "payment_method": null, "effective_at": "2026-02-25T14:30:00+07:00",
+    "payment_method": null, "effective_at": "2026-02-25T07:30:00+00:00",
     "metadata": {"raw_text": "spent 300k on groceries at alfamart via jago"},
     "status": "posted"
 }'''

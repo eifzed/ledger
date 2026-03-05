@@ -9,7 +9,7 @@ from app.errors import LedgerHTTPException
 from app.models import Account, Transaction, User
 from app.schemas import AccountBalance, AccountCreate, AccountOut, AdjustRequest
 from app.services import account_service
-from app.tz import now_jakarta
+from app.tz import now_utc
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
 
@@ -56,7 +56,7 @@ async def adjust_account(account_id: str, body: AdjustRequest, db: Session = Dep
         db.flush()
 
     txn = Transaction(
-        effective_at=now_jakarta(),
+        effective_at=now_utc(),
         user_id=body.user_id,
         transaction_type="adjustment",
         amount=abs(body.amount),

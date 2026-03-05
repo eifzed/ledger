@@ -127,7 +127,7 @@ Transaction IDs are auto-incrementing integers (1, 2, 3, ...). Users are auto-cr
 | `transfer` | `user_id`, `amount`, `from_account_id`, `to_account_id` | |
 | `adjustment` | `user_id`, `amount` | |
 
-**Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601 with timezone offset, e.g. `2026-02-25T05:00:00+07:00`; defaults to current server time if omitted).
+**Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601 with any timezone offset, e.g. `2026-02-25T05:00:00+07:00`; the backend converts to UTC before storing; defaults to current UTC time if omitted).
 
 **Response** includes: `transaction` (with integer `id`), `balances`, `budget_status`, `warnings`.
 

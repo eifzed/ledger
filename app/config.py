@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         env_prefix="LEDGER_",
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     db_path: str = "./data/ledger.db"

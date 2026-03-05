@@ -113,7 +113,7 @@ Dashboard is served by the Python Finance API.
 #### transactions
 - id (INTEGER, PK AUTOINCREMENT) — auto-incrementing integer
 - created_at (DATETIME) — server time
-- effective_at (DATETIME) — when it happened (ISO 8601 with timezone offset; defaults to server now). The Discord bot parses natural language time expressions ("at 5am", "yesterday 3pm", etc.) into this field.
+- effective_at (DATETIME) — when it happened, **stored as UTC**. The API accepts ISO 8601 with any timezone offset and converts to UTC before storing. Responses return UTC (`+00:00`). Defaults to `now()` UTC.
 - user_id (TEXT, FK users.id) — who logged it / who did it
 - transaction_type (TEXT)
 - amount (INTEGER) — positive integer in IDR
@@ -237,7 +237,7 @@ Simplest:
 }
 ```
 
-`effective_at` accepts ISO 8601 with timezone offset. The Discord bot parses natural language time expressions ("at 5am", "yesterday 3pm", "at 17.30") into this field. If omitted, defaults to server's current time.
+`effective_at` accepts ISO 8601 with any timezone offset. The backend converts to UTC before storing. Responses return UTC (`+00:00`). Month grouping uses Jakarta time (UTC+7). If omitted, defaults to current UTC time.
 
 Return:
 ```json

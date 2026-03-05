@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from datetime import timezone
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -217,6 +219,14 @@ class TransactionOut(BaseModel):
     metadata_json: dict[str, Any] | None = Field(None, alias="metadata_json")
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+    @field_validator("effective_at", "created_at", mode="before")
+    @classmethod
+    def ensure_utc(cls, v: Any) -> Any:
+        """Tag naive datetimes from SQLite as UTC."""
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
 
     @field_validator("metadata_json", mode="before")
     @classmethod

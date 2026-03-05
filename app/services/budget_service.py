@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Budget, BudgetSnapshot, Category, Transaction
 from app.schemas import BudgetStatusItem, BudgetWarningSeverity, WarningItem
+from app.tz import col_as_jakarta
 
 
 def get_category_family(db: Session, category_id: str) -> list[str]:
@@ -252,7 +253,7 @@ def _category_family_spend(
         .filter(
             Transaction.transaction_type == "expense",
             Transaction.status == "posted",
-            func.strftime("%Y-%m", Transaction.effective_at) == month,
+            func.strftime("%Y-%m", col_as_jakarta(Transaction.effective_at)) == month,
             Transaction.category_id.in_(category_ids),
         )
     )
