@@ -8,17 +8,18 @@
 
 ## Accounts
 
-Each user has their own accounts. Account IDs are prefixed with the user's ID:
+Each user has their own copy of every account. Account IDs are prefixed with the user's ID:
 
-| ID | Name | Type | Owner |
-|---|---|---|---|
-| `fazrin_BCA` | BCA | bank | fazrin |
-| `fazrin_JAGO` | Jago | bank | fazrin |
-| `fazrin_CASH` | Cash | cash | fazrin |
-| `fazrin_GOPAY` | GoPay | ewallet | fazrin |
-| `fazrin_OVO` | OVO | ewallet | fazrin |
-| `magfira_CBA` | CBA | bank | magfira |
-| `magfira_CASH` | Cash | cash | magfira |
+| Suffix | Name | Type |
+|---|---|---|
+| `BCA` | BCA | bank |
+| `JAGO` | Jago | bank |
+| `CBA` | CBA | bank |
+| `CASH` | Cash | cash |
+| `GOPAY` | GoPay | ewallet |
+| `OVO` | OVO | ewallet |
+
+Every known user gets all of the above (e.g. `fazrin_BCA`, `magfira_BCA`, `fazrin_CBA`, `magfira_CBA`, etc.).
 
 When a user logs a transaction, **always use their own accounts**. The backend enforces this — using another user's account will be rejected.
 

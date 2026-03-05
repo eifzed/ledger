@@ -29,14 +29,19 @@ CONVERT_AUD_788 = '{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.70,
 FAZRIN_ACCOUNTS = '''[
     {"id": "fazrin_BCA", "display_name": "BCA", "type": "bank", "owner_id": "fazrin"},
     {"id": "fazrin_JAGO", "display_name": "Jago", "type": "bank", "owner_id": "fazrin"},
+    {"id": "fazrin_CBA", "display_name": "CBA", "type": "bank", "owner_id": "fazrin"},
     {"id": "fazrin_CASH", "display_name": "Cash", "type": "cash", "owner_id": "fazrin"},
     {"id": "fazrin_GOPAY", "display_name": "GoPay", "type": "ewallet", "owner_id": "fazrin"},
     {"id": "fazrin_OVO", "display_name": "OVO", "type": "ewallet", "owner_id": "fazrin"}
 ]'''
 
 MAGFIRA_ACCOUNTS = '''[
+    {"id": "magfira_BCA", "display_name": "BCA", "type": "bank", "owner_id": "magfira"},
+    {"id": "magfira_JAGO", "display_name": "Jago", "type": "bank", "owner_id": "magfira"},
     {"id": "magfira_CBA", "display_name": "CBA", "type": "bank", "owner_id": "magfira"},
-    {"id": "magfira_CASH", "display_name": "Cash", "type": "cash", "owner_id": "magfira"}
+    {"id": "magfira_CASH", "display_name": "Cash", "type": "cash", "owner_id": "magfira"},
+    {"id": "magfira_GOPAY", "display_name": "GoPay", "type": "ewallet", "owner_id": "magfira"},
+    {"id": "magfira_OVO", "display_name": "OVO", "type": "ewallet", "owner_id": "magfira"}
 ]'''
 
 TRANSACTION_RESPONSE = '''{
@@ -217,6 +222,25 @@ class TestAccountOwnership:
         )
         assert to_acct.lower() in ("bca", "fazrin_bca"), (
             f"Expected fazrin's BCA for income, got '{to_acct}'"
+        )
+
+    def test_magfira_gopay_deducts_from_her_account(self, llm, system_prompt):
+        """Magfira using GoPay should deduct from magfira_GOPAY, not fazrin_GOPAY."""
+        resp = ask_multi(
+            llm, system_prompt, "[Magfira] bought coffee 25k via gopay",
+            fake_responses=MAGFIRA_FAKES,
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        assert body is not None, "Should POST a transaction"
+        assert body.get("user_id") == "magfira", (
+            f"user_id should be 'magfira', got '{body.get('user_id')}'"
+        )
+        acct = body.get("from_account_id", "")
+        assert "fazrin" not in acct.lower(), (
+            f"Magfira's GoPay txn deducted from fazrin's account: {acct}"
+        )
+        assert acct.lower() in ("gopay", "magfira_gopay"), (
+            f"Expected magfira's GoPay, got '{acct}'"
         )
 
 
