@@ -19,9 +19,11 @@ Each user has their own accounts. Account IDs are prefixed with the user's ID:
 | `magfira_CBA` | CBA | bank | magfira |
 | `magfira_CASH` | Cash | cash | magfira |
 
-When a user logs a transaction, **default to their own accounts** (matching by owner_id). Call `GET /v1/accounts?user_id=<user_id>` to see the user's accounts.
+When a user logs a transaction, **always use their own accounts**. The backend enforces this — using another user's account will be rejected.
 
-New users won't have accounts yet — ask them to create one or just ask which account they want to use.
+You can send just the display name (e.g. `"Cash"`, `"BCA"`) as the account ID and the backend will auto-resolve it to the user's prefixed account (e.g. `"Cash"` → `magfira_CASH` for user magfira).
+
+Call `GET /v1/accounts?user_id=<user_id>` to see a user's accounts. New users won't have accounts yet — ask them to create one.
 
 If the user says QRIS, the *payment_method* is `qris` — but you still need to know which account was charged.
 

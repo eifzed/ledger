@@ -162,19 +162,59 @@ def _ensure_user(db: Session, user_id: str) -> None:
         db.flush()
 
 
+def _resolve_account(db: Session, user_id: str, account_id: str, field: str) -> str:
+    """Resolve an account ID, trying user-prefixed version if exact match fails.
+
+    Resolution order:
+    1. Exact match (e.g. "magfira_CBA")
+    2. User-prefixed (e.g. "CBA" → "magfira_CBA")
+    3. Case-insensitive display name match for the user (e.g. "cash" → "magfira_CASH")
+    """
+    acct = db.query(Account).filter(Account.id == account_id).first()
+    if acct:
+        if acct.owner_id and acct.owner_id != user_id:
+            raise LedgerHTTPException(
+                422, "ACCOUNT_OWNERSHIP_ERROR",
+                f"Account '{account_id}' belongs to {acct.owner_id}, not {user_id}. "
+                f"Use {user_id}'s own accounts instead.",
+                [ErrorDetail(field=field, issue=f"Account belongs to {acct.owner_id}")],
+            )
+        return account_id
+
+    prefixed = f"{user_id}_{account_id}"
+    acct = db.query(Account).filter(Account.id == prefixed).first()
+    if acct:
+        return prefixed
+
+    acct = (
+        db.query(Account)
+        .filter(
+            Account.owner_id == user_id,
+            func.lower(Account.display_name) == account_id.lower(),
+        )
+        .first()
+    )
+    if acct:
+        return acct.id
+
+    raise LedgerHTTPException(
+        422, "VALIDATION_ERROR",
+        f"Account '{account_id}' not found for user {user_id}",
+        [ErrorDetail(field=field, issue=f"Account '{account_id}' not found")],
+    )
+
+
 def _validate_references(db: Session, data: TransactionCreate) -> None:
     _ensure_user(db, data.user_id)
 
-    missing: list[ErrorDetail] = []
-
     if data.category_id and not db.query(Category).filter(Category.id == data.category_id).first():
-        missing.append(ErrorDetail(field="category_id", issue=f"Category '{data.category_id}' not found"))
+        raise LedgerHTTPException(
+            422, "VALIDATION_ERROR", f"Category '{data.category_id}' not found",
+            [ErrorDetail(field="category_id", issue=f"Category '{data.category_id}' not found")],
+        )
 
-    if data.from_account_id and not db.query(Account).filter(Account.id == data.from_account_id).first():
-        missing.append(ErrorDetail(field="from_account_id", issue=f"Account '{data.from_account_id}' not found"))
+    if data.from_account_id:
+        data.from_account_id = _resolve_account(db, data.user_id, data.from_account_id, "from_account_id")
 
-    if data.to_account_id and not db.query(Account).filter(Account.id == data.to_account_id).first():
-        missing.append(ErrorDetail(field="to_account_id", issue=f"Account '{data.to_account_id}' not found"))
-
-    if missing:
-        raise LedgerHTTPException(422, "VALIDATION_ERROR", "Referenced entities not found", missing)
+    if data.to_account_id:
+        data.to_account_id = _resolve_account(db, data.user_id, data.to_account_id, "to_account_id")

@@ -28,6 +28,9 @@ data/*.db-shm
 *.swo
 *~
 
+# Test logs
+tests/results/
+
 # OS
 .DS_Store
 Thumbs.db

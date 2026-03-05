@@ -39,7 +39,7 @@ curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_
 }'
 ```
 
-Account IDs are per-user (e.g. `fazrin_BCA`, `magfira_CBA`). Use `GET /v1/accounts?user_id=<user_id>` to see the user's accounts.
+Account IDs are per-user (e.g. `fazrin_BCA`, `magfira_CBA`). The backend auto-resolves unprefixed names — you can send `"BCA"` or `"Cash"` and it will resolve to the correct user's account (e.g. `magfira_CASH` for user magfira). The backend also rejects attempts to use another user's account. Use `GET /v1/accounts?user_id=<user_id>` to see the user's accounts.
 
 **Required fields by type:**
 - **expense**: `user_id`, `transaction_type`, `amount`, `category_id`, `from_account_id` (`to_account_id` must be null)

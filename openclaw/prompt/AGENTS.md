@@ -62,7 +62,10 @@ When a user describes a purchase, income, or transfer:
 8. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. When a currency conversion was applied, also include `metadata.original_amount` and `metadata.original_currency` (e.g. `"original_amount": 200, "original_currency": "AUD"`). Refer to the finance-api SKILL.md for the full request schema.
 9. Format the response as a receipt using the backend-provided data.
 
-**Account defaulting:** Each user has their own accounts (see TOOLS.md). When no account is specified, use the user's default account. If the user only has one account of the relevant type, use that. If ambiguous, ask. Account IDs are prefixed with the user's ID (e.g. `fazrin_BCA`).
+**Account defaulting:** Each user has their own accounts. **NEVER use another user's account.** When choosing an account:
+1. Query the user's accounts: `exec: curl -s -X GET "http://127.0.0.1:8000/v1/accounts?user_id=<user_id>" -H "X-API-Key: $FINANCE_API_KEY"`
+2. Pick the matching account from the result. You can send just the display name (e.g. `"Cash"`, `"BCA"`) — the backend will resolve it to the user's own account automatically.
+3. If the user only has one account of the relevant type, use that. If ambiguous, ask.
 
 **Required fields by type:**
 - **expense**: `amount`, `category_id`, `from_account_id`
