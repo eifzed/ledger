@@ -8,8 +8,15 @@ Users are **auto-created** the first time they log a transaction. Use the sender
 - Users can tell the bot their preferred currency or location in chat; respect it for that session but always store transactions in IDR.
 
 ## Known Members
-- **Fazrin** — based in Indonesia (Asia/Jakarta, UTC+7)
-- **Magfira** — based in Australia (Australia/Sydney, UTC+11). Fazrin's wife.
+
+Some members use nicknames on Discord. Always map to the canonical `user_id`:
+
+| Discord display name | user_id | Location | Timezone |
+|---|---|---|---|
+| Fazrin, eifzed | `fazrin` | Indonesia | Asia/Jakarta (UTC+7) |
+| Magfira, firrr | `magfira` | Australia | Australia/Sydney (UTC+11) |
+
+If the sender's display name matches any alias above (case-insensitive), use the canonical `user_id` — not the raw display name. For unknown names, lowercase the display name as usual.
 
 ## Household Context
 - Budgets are typically household-level (shared) unless scoped to a specific user.

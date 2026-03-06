@@ -119,6 +119,63 @@ class TestUserIdExtraction:
         assert "what's your user" not in text
         assert "need to know your user" not in text
 
+    def test_alias_firrr_resolves_to_magfira(self, llm, system_prompt):
+        """Discord nickname 'firrr' is Magfira — must use user_id='magfira'."""
+        resp = ask_multi(
+            llm, system_prompt, "[firrr] spent 50k on groceries via cash",
+            fake_responses=MAGFIRA_FAKES,
+        )
+        bodies = resp.curl_bodies()
+        assert any(b.get("user_id") == "magfira" for b in bodies), (
+            f"Expected user_id='magfira' for alias 'firrr'. Got bodies: {bodies}"
+        )
+        assert not any(b.get("user_id") == "firrr" for b in bodies), (
+            "Should NOT use raw display name 'firrr' as user_id"
+        )
+
+    def test_alias_firrr_gets_magfira_accounts(self, llm, system_prompt):
+        """When firrr logs a transaction, bot should query magfira's accounts."""
+        resp = ask_multi(
+            llm, system_prompt, "[firrr] spent 25k on coffee via CBA",
+            fake_responses=MAGFIRA_FAKES,
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body:
+            acct = body.get("from_account_id", "")
+            assert "fazrin" not in acct.lower(), (
+                f"firrr (Magfira) should not use fazrin's account: {acct}"
+            )
+            assert acct.lower() in ("cba", "magfira_cba"), (
+                f"Expected magfira's CBA, got '{acct}'"
+            )
+
+    def test_alias_firrr_uses_sydney_timezone(self, llm, system_prompt):
+        """firrr is Magfira — should use Australia/Sydney timezone."""
+        resp = ask_multi(
+            llm, system_prompt, "[firrr] bought lunch 30k via cash at 2pm",
+            fake_responses={"/v1/meta": META_RESPONSE, "/v1/accounts": MAGFIRA_ACCOUNTS, "/v1/transactions": TRANSACTION_RESPONSE},
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+11:00" in ea or "+11" in ea, (
+                f"firrr (Magfira) should use Sydney timezone, got {ea}"
+            )
+
+    def test_alias_eifzed_resolves_to_fazrin(self, llm, system_prompt):
+        """Discord nickname 'eifzed' is Fazrin — must use user_id='fazrin'."""
+        resp = ask_multi(
+            llm, system_prompt, "[eifzed] spent 50k for gym via jago",
+            fake_responses=STANDARD_FAKES,
+        )
+        bodies = resp.curl_bodies()
+        assert any(b.get("user_id") == "fazrin" for b in bodies), (
+            f"Expected user_id='fazrin' for alias 'eifzed'. Got bodies: {bodies}"
+        )
+        assert not any(b.get("user_id") == "eifzed" for b in bodies), (
+            "Should NOT use raw display name 'eifzed' as user_id"
+        )
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. Account ownership — use the correct user's accounts
