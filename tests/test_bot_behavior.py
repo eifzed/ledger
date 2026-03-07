@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import ask, ask_multi, parse_curl_body
+from tests.conftest import ask, ask_multi, curl_url_path, parse_curl_body
 
 # ---------------------------------------------------------------------------
 # Fake backend responses for multi-turn tests.
@@ -22,7 +22,14 @@ from tests.conftest import ask, ask_multi, parse_curl_body
 # These simulate those intermediate responses so the full flow completes.
 # ---------------------------------------------------------------------------
 
-META_RESPONSE = '{"server_time": "2026-02-25T14:30:00+07:00", "categories": [{"id":"food","display_name":"Food","parent_id":null},{"id":"groceries","display_name":"Groceries","parent_id":"food"},{"id":"eating_out","display_name":"Eating Out","parent_id":"food"},{"id":"coffee","display_name":"Coffee","parent_id":"food"},{"id":"transport","display_name":"Transport","parent_id":null},{"id":"fuel","display_name":"Fuel","parent_id":"transport"},{"id":"parking","display_name":"Parking","parent_id":"transport"},{"id":"shopping","display_name":"Shopping","parent_id":null},{"id":"income","display_name":"Income","parent_id":null},{"id":"salary","display_name":"Salary","parent_id":"income"}], "accounts": [], "users": [], "payment_methods": ["cash","qris","debit","credit","bank_transfer","ewallet","other"], "transaction_types": ["expense","income","transfer","adjustment"]}'
+_CATEGORIES_JSON = '[{"id":"food","display_name":"Food","parent_id":null},{"id":"groceries","display_name":"Groceries","parent_id":"food"},{"id":"eating_out","display_name":"Eating Out","parent_id":"food"},{"id":"coffee","display_name":"Coffee","parent_id":"food"},{"id":"transport","display_name":"Transport","parent_id":null},{"id":"fuel","display_name":"Fuel","parent_id":"transport"},{"id":"parking","display_name":"Parking","parent_id":"transport"},{"id":"shopping","display_name":"Shopping","parent_id":null},{"id":"income","display_name":"Income","parent_id":null},{"id":"salary","display_name":"Salary","parent_id":"income"}]'
+_META_TEMPLATE = '{{"server_time": "{server_time}", "categories": {cats}, "accounts": [], "users": [], "payment_methods": ["cash","qris","debit","credit","bank_transfer","ewallet","other"], "transaction_types": ["expense","income","transfer","adjustment"]}}'.replace("{cats}", _CATEGORIES_JSON)
+
+# Feb 25 — Australia/Sydney is in AEDT (UTC+11)
+META_RESPONSE = _META_TEMPLATE.format(server_time="2026-02-25T14:30:00+07:00")
+
+# Jul 15 — Australia/Sydney is in AEST (UTC+10)
+META_RESPONSE_AEST = _META_TEMPLATE.format(server_time="2026-07-15T14:30:00+07:00")
 CONVERT_AUD_25 = '{"from": "AUD", "to": "IDR", "amount": 25, "rate": 11951.70, "result": 298792}'
 CONVERT_AUD_788 = '{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.70, "result": 9417938}'
 
@@ -150,7 +157,7 @@ class TestUserIdExtraction:
             )
 
     def test_alias_firrr_uses_sydney_timezone(self, llm, system_prompt):
-        """firrr is Magfira — should use Australia/Sydney timezone."""
+        """firrr is Magfira — should use Australia/Sydney timezone (Feb = AEDT = +11:00)."""
         resp = ask_multi(
             llm, system_prompt, "[firrr] bought lunch 30k via cash at 2pm",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/accounts": MAGFIRA_ACCOUNTS, "/v1/transactions": TRANSACTION_RESPONSE},
@@ -159,7 +166,7 @@ class TestUserIdExtraction:
         if body and body.get("effective_at"):
             ea = body["effective_at"]
             assert "+11:00" in ea or "+11" in ea, (
-                f"firrr (Magfira) should use Sydney timezone, got {ea}"
+                f"firrr (Magfira) should use Sydney AEDT offset in Feb, got {ea}"
             )
 
     def test_alias_eifzed_resolves_to_fazrin(self, llm, system_prompt):
@@ -508,10 +515,10 @@ class TestTimeParsing:
 
 
 class TestTimezone:
-    """Timezone handling: each user gets their own offset, API returns UTC."""
+    """Timezone handling: each user gets their own DST-aware offset, API returns UTC."""
 
-    def test_magfira_timezone(self, llm, system_prompt):
-        """Magfira's times should use Australia/Sydney (+11:00)."""
+    def test_magfira_aedt_timezone(self, llm, system_prompt):
+        """Feb is AEDT — Magfira should use +11:00."""
         resp = ask_multi(
             llm,
             system_prompt,
@@ -522,11 +529,29 @@ class TestTimezone:
         if body and body.get("effective_at"):
             ea = body["effective_at"]
             assert "+11:00" in ea or "+11" in ea, (
-                f"Magfira should use Australia/Sydney timezone, got {ea}"
+                f"Magfira should use +11:00 (AEDT) in Feb, got {ea}"
+            )
+
+    def test_magfira_aest_timezone(self, llm, system_prompt):
+        """Jul is AEST — Magfira should use +10:00, not +11:00."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Magfira] spent 50k on groceries via cash at 3pm",
+            fake_responses={"/v1/meta": META_RESPONSE_AEST, "/v1/transactions": TRANSACTION_RESPONSE},
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+10:00" in ea or "+10" in ea, (
+                f"Magfira should use +10:00 (AEST) in Jul, got {ea}"
+            )
+            assert "+11" not in ea, (
+                f"Magfira should NOT use +11:00 (AEDT) in Jul, got {ea}"
             )
 
     def test_fazrin_uses_jakarta_timezone(self, llm, system_prompt):
-        """Fazrin's times should use Asia/Jakarta (+07:00)."""
+        """Fazrin's times should use Asia/Jakarta (+07:00) — no DST."""
         resp = ask_multi(
             llm,
             system_prompt,
@@ -541,7 +566,7 @@ class TestTimezone:
             )
 
     def test_magfira_yesterday_uses_sydney_offset(self, llm, system_prompt):
-        """Relative time ('yesterday') for Magfira should still carry +11:00."""
+        """Relative time ('yesterday') for Magfira in Feb should carry +11:00 (AEDT)."""
         resp = ask_multi(
             llm,
             system_prompt,
@@ -556,7 +581,7 @@ class TestTimezone:
         if body and body.get("effective_at"):
             ea = body["effective_at"]
             assert "+11:00" in ea or "+11" in ea, (
-                f"Magfira's relative time should use Sydney offset, got {ea}"
+                f"Magfira's relative time should use Sydney AEDT offset in Feb, got {ea}"
             )
             assert "2026-02-24" in ea, (
                 f"Yesterday from Feb 25 should be Feb 24, got {ea}"
@@ -580,7 +605,7 @@ class TestTimezone:
     def test_revision_with_utc_response(self, llm, system_prompt):
         """When the bot reads back a UTC effective_at from the API during a revision,
         it should not be confused and should correctly apply the new time with the
-        user's local offset."""
+        user's current DST-aware offset (Feb = AEDT = +11:00)."""
         utc_txn = '''{
             "id": 5, "user_id": "magfira", "transaction_type": "expense",
             "amount": 30000, "category_id": "groceries",
@@ -603,10 +628,109 @@ class TestTimezone:
         if body and body.get("effective_at"):
             ea = body["effective_at"]
             assert "+11:00" in ea or "+11" in ea, (
-                f"Magfira's revised time should use Sydney offset, got {ea}"
+                f"Magfira's revised time should use Sydney AEDT offset in Feb, got {ea}"
             )
             assert "18:00" in ea or "T18:" in ea, (
                 f"6pm should be 18:00 local, got {ea}"
+            )
+
+    def test_fazrin_unaffected_by_aest_period(self, llm, system_prompt):
+        """Fazrin stays +07:00 even when server_time is in July (AEST period)."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Fazrin] bought coffee 15k via cash at 9am",
+            fake_responses={
+                "/v1/meta": META_RESPONSE_AEST,
+                "/v1/accounts": FAZRIN_ACCOUNTS,
+                "/v1/transactions": TRANSACTION_RESPONSE,
+            },
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+07:00" in ea or "+07" in ea, (
+                f"Fazrin should always use +07:00 regardless of season, got {ea}"
+            )
+
+    def test_magfira_yesterday_aest_uses_plus_10(self, llm, system_prompt):
+        """Relative time ('yesterday') for Magfira in Jul should carry +10:00 (AEST)."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Magfira] bought groceries 30k via cash yesterday 2pm",
+            fake_responses={
+                "/v1/meta": META_RESPONSE_AEST,
+                "/v1/accounts": MAGFIRA_ACCOUNTS,
+                "/v1/transactions": TRANSACTION_RESPONSE,
+            },
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+10:00" in ea or "+10" in ea, (
+                f"Magfira's relative time should use +10:00 (AEST) in Jul, got {ea}"
+            )
+            assert "+11" not in ea, (
+                f"Should NOT use +11:00 (AEDT) in Jul, got {ea}"
+            )
+            assert "2026-07-14" in ea, (
+                f"Yesterday from Jul 15 should be Jul 14, got {ea}"
+            )
+
+    def test_magfira_revision_aest_uses_plus_10(self, llm, system_prompt):
+        """Revision for Magfira during AEST (Jul) should use +10:00."""
+        utc_txn = '''{
+            "id": 8, "user_id": "magfira", "transaction_type": "expense",
+            "amount": 50000, "category_id": "groceries",
+            "from_account_id": "magfira_CASH", "to_account_id": null,
+            "description": "groceries", "merchant": null,
+            "payment_method": null, "effective_at": "2026-07-15T04:00:00+00:00",
+            "metadata": {}, "status": "posted"
+        }'''
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Magfira] fix #8 should be 3pm",
+            fake_responses={
+                "/v1/meta": META_RESPONSE_AEST,
+                "/v1/transactions/8": utc_txn,
+                "/v1/transactions/8/correct": TRANSACTION_RESPONSE,
+            },
+        )
+        body = resp.find_body("POST", "/v1/transactions/8/correct")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+10:00" in ea or "+10" in ea, (
+                f"Magfira's revised time should use +10:00 (AEST) in Jul, got {ea}"
+            )
+            assert "+11" not in ea, (
+                f"Should NOT use +11:00 (AEDT) in Jul, got {ea}"
+            )
+            assert "15:00" in ea or "T15:" in ea, (
+                f"3pm should be 15:00 local, got {ea}"
+            )
+
+    def test_alias_firrr_aest_uses_plus_10(self, llm, system_prompt):
+        """firrr is Magfira — in Jul (AEST) should use +10:00."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[firrr] bought lunch 30k via cash at 2pm",
+            fake_responses={
+                "/v1/meta": META_RESPONSE_AEST,
+                "/v1/accounts": MAGFIRA_ACCOUNTS,
+                "/v1/transactions": TRANSACTION_RESPONSE,
+            },
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body and body.get("effective_at"):
+            ea = body["effective_at"]
+            assert "+10:00" in ea or "+10" in ea, (
+                f"firrr (Magfira) should use +10:00 (AEST) in Jul, got {ea}"
+            )
+            assert "+11" not in ea, (
+                f"firrr (Magfira) should NOT use +11:00 (AEDT) in Jul, got {ea}"
             )
 
 
@@ -917,6 +1041,80 @@ class TestSafety:
             assert not cmd.startswith("finance-api"), (
                 f"Must not run 'finance-api' as a CLI command. Got: {cmd}"
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 11b. Transaction IDs — must be integers, never UUIDs
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestTransactionIds:
+    """Transaction IDs are auto-incrementing integers (1, 2, 3...), not UUIDs."""
+
+    def test_void_uses_integer_id_in_url(self, llm, system_prompt):
+        """'cancel #3' should produce /v1/transactions/3/void, not a UUID path."""
+        resp = ask(llm, system_prompt, "[Fazrin] cancel #3")
+        void_curls = [c for c in resp.curls if "/void" in c]
+        assert len(void_curls) >= 1, "Should produce a void curl command"
+        for cmd in void_curls:
+            path = curl_url_path(cmd)
+            assert path is not None, f"Could not extract URL path from: {cmd}"
+            assert "/v1/transactions/3/void" in path, (
+                f"Should use integer ID 3, got path: {path}"
+            )
+            assert len(path.split("/")) <= 5, (
+                f"Path looks like a UUID was used instead of integer: {path}"
+            )
+
+    def test_get_transaction_uses_integer_id(self, llm, system_prompt):
+        """Fetching transaction #7 should use /v1/transactions/7."""
+        resp = ask_multi(
+            llm, system_prompt, "[Fazrin] show me transaction #7",
+            fake_responses={
+                "/v1/transactions/7": GET_TXN_1_RESPONSE,
+                "/v1/meta": META_RESPONSE,
+            },
+        )
+        get_curls = [c for c in resp.curls if "GET" in c and "/v1/transactions/" in c]
+        assert len(get_curls) >= 1, "Should GET the transaction by ID"
+        matched = False
+        for cmd in get_curls:
+            path = curl_url_path(cmd)
+            if path and "/v1/transactions/7" in path:
+                matched = True
+        assert matched, (
+            f"Should use integer ID 7 in URL path. Got curls: {get_curls}"
+        )
+
+    def test_correct_uses_integer_id_in_url(self, llm, system_prompt):
+        """'fix #1' should produce /v1/transactions/1/correct, not a UUID path."""
+        resp = ask_multi(
+            llm, system_prompt, "[Fazrin] fix #1 should be 350k",
+            fake_responses={
+                "/v1/transactions/1": GET_TXN_1_RESPONSE,
+                "/correct": TRANSACTION_RESPONSE,
+            },
+        )
+        correct_curls = [c for c in resp.curls if "/correct" in c]
+        assert len(correct_curls) >= 1, "Should produce a correct curl command"
+        for cmd in correct_curls:
+            path = curl_url_path(cmd)
+            assert path is not None, f"Could not extract URL path from: {cmd}"
+            assert "/v1/transactions/1/correct" in path, (
+                f"Should use integer ID 1, got path: {path}"
+            )
+
+    def test_void_id_from_natural_language(self, llm, system_prompt):
+        """'cancel transaction number 12' should use ID 12, not ask for a UUID."""
+        resp = ask(llm, system_prompt, "[Fazrin] cancel transaction number 12")
+        void_curls = [c for c in resp.curls if "/void" in c]
+        assert len(void_curls) >= 1, "Should produce a void curl command"
+        cmd = void_curls[0]
+        assert "/v1/transactions/12/void" in cmd, (
+            f"Should extract integer ID 12 from message. Got: {cmd}"
+        )
+        text = resp.text.lower()
+        assert "uuid" not in text, "Bot should not mention or ask for UUIDs"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

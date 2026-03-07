@@ -5,8 +5,8 @@
     "type": "object",
     "properties": {
       "txn_id": {
-        "type": "string",
-        "description": "UUID of the transaction to void."
+        "type": "integer",
+        "description": "Auto-incrementing integer ID of the transaction to void (e.g. 1, 2, 42)."
       }
     },
     "required": ["txn_id"]

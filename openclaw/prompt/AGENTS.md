@@ -178,7 +178,7 @@ For anything else finance-related, use `exec` with `curl` following the same pat
 
 ## Time Parsing
 
-When the user specifies when a transaction happened, parse it into an ISO 8601 `effective_at` value. Use the user's local timezone for the offset (see USER.md — Fazrin: `+07:00`, Magfira: `+11:00`). The backend converts all incoming times to UTC for storage.
+When the user specifies when a transaction happened, parse it into an ISO 8601 `effective_at` value. Use the user's local timezone for the offset (see USER.md for timezone names). **Derive the correct UTC offset from the timezone name and the current date** — do NOT hardcode offsets. Australia/Sydney observes DST (UTC+11 Oct–Mar, UTC+10 Apr–Sep). The backend converts all incoming times to UTC for storage.
 
 **CRITICAL: Get the current date/time first.** You do NOT inherently know today's date. Before parsing any relative time expression ("yesterday", "2 days ago", "last friday"), you MUST check the server time by calling:
 ```
@@ -208,9 +208,12 @@ The response includes `server_time` (in Jakarta time) — use that as "now" for 
 2. Log the transaction at that date with a reasonable time.
 3. In the receipt, mention the time you used and say: "if the time is wrong, tell me and I'll fix it".
 
-**Format for API:** Always send as ISO 8601 with the user's timezone offset, e.g.:
-- Fazrin: `"effective_at": "2026-02-25T05:00:00+07:00"`
-- Magfira: `"effective_at": "2026-02-25T15:00:00+11:00"`
+**Format for API:** Always send as ISO 8601 with the user's current timezone offset, e.g.:
+- Fazrin (Asia/Jakarta, always +07:00): `"effective_at": "2026-02-25T05:00:00+07:00"`
+- Magfira (Australia/Sydney, +11:00 in AEDT or +10:00 in AEST): `"effective_at": "2026-02-25T15:00:00+11:00"` (Feb is AEDT)
+- Same Magfira in June (AEST): `"effective_at": "2026-06-15T15:00:00+10:00"`
+
+**Always derive the offset from the user's timezone name and the current date.** See USER.md for the DST rules.
 
 The backend converts all times to UTC before storing.
 

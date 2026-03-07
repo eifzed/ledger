@@ -5,8 +5,8 @@
     "type": "object",
     "properties": {
       "txn_id": {
-        "type": "string",
-        "description": "UUID of the original transaction to correct."
+        "type": "integer",
+        "description": "Auto-incrementing integer ID of the original transaction to correct (e.g. 1, 2, 42)."
       },
       "user_id": {
         "type": "string",
