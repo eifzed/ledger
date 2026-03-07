@@ -683,6 +683,76 @@ class TestCurrencyConversion:
                 f"Budget should use converted amount 9417938, got {body.get('limit_amount')}"
             )
 
+    def test_small_decimal_aud_calls_convert(self, llm, system_prompt):
+        """Small decimal AUD amounts (e.g. 6.39) should use /v1/convert, not manual math."""
+        convert_639 = '{"from": "AUD", "to": "IDR", "amount": 6.39, "rate": 11926.22, "result": 76209}'
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[firrr] spent aud 6.39 on tempe via jago",
+            fake_responses={
+                "/v1/convert": convert_639,
+                "/v1/transactions": TRANSACTION_RESPONSE,
+                "/v1/meta": META_RESPONSE,
+                "/v1/accounts": MAGFIRA_ACCOUNTS,
+            },
+        )
+        assert resp.has_curl("GET", "/v1/convert"), "Should call /v1/convert for AUD"
+        body = resp.find_body("POST", "/v1/transactions")
+        if body:
+            assert body.get("amount") == 76209, (
+                f"Should use convert result 76209, got {body.get('amount')}"
+            )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 8b. Multi-item messages — one transaction per item
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestMultiItem:
+    """Bot creates one transaction per item when user lists multiple purchases."""
+
+    def test_multi_item_creates_multiple_transactions(self, llm, system_prompt):
+        """Two items in one message should produce two POST /v1/transactions calls."""
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[Fazrin] beli bensin 50k dan parkir ceban via cash",
+            fake_responses=STANDARD_FAKES,
+        )
+        post_bodies = [
+            b for b in resp.curl_bodies()
+            if b.get("transaction_type") == "expense"
+        ]
+        assert len(post_bodies) >= 2, (
+            f"Expected at least 2 transactions for 2 items. Got {len(post_bodies)}: {post_bodies}"
+        )
+
+    def test_multi_item_aud_converts_each(self, llm, system_prompt):
+        """Multiple AUD items should each go through /v1/convert."""
+        convert_responses = {
+            "6.39": '{"from": "AUD", "to": "IDR", "amount": 6.39, "rate": 11926.22, "result": 76209}',
+            "2.69": '{"from": "AUD", "to": "IDR", "amount": 2.69, "rate": 11926.22, "result": 32082}',
+        }
+        resp = ask_multi(
+            llm,
+            system_prompt,
+            "[firrr] spent aud 6.39 for tempe and aud 2.69 for rice flour, from jago",
+            fake_responses={
+                "/v1/convert": convert_responses.get("6.39", '{"from":"AUD","to":"IDR","amount":6.39,"rate":11926.22,"result":76209}'),
+                "/v1/transactions": TRANSACTION_RESPONSE,
+                "/v1/meta": META_RESPONSE,
+                "/v1/accounts": MAGFIRA_ACCOUNTS,
+            },
+        )
+        convert_curls = [c for c in resp.curls if "/v1/convert" in c]
+        assert len(convert_curls) >= 1, "Should call /v1/convert at least once for AUD items"
+        post_bodies = resp.curl_bodies()
+        assert len(post_bodies) >= 2, (
+            f"Expected at least 2 transactions. Got {len(post_bodies)}"
+        )
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 9. Revision flow — fetch original first, copy all fields

@@ -62,6 +62,8 @@ When a user describes a purchase, income, or transfer:
 8. Use `exec` to run `curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '<JSON>'` with the constructed JSON body. Always include `metadata.raw_text` with the user's original message. When a currency conversion was applied, also include `metadata.original_amount` and `metadata.original_currency` (e.g. `"original_amount": 200, "original_currency": "AUD"`). Refer to the finance-api SKILL.md for the full request schema.
 9. Format the response as a receipt using the backend-provided data.
 
+**Multiple items in one message:** When a user lists several purchases (e.g. "bought X for 50k, Y for 30k, Z for 20k"), create **one transaction per item**. Process them sequentially — convert currency if needed, then POST each one. Share a single account/meta lookup across all items (no need to re-query). Show one combined summary at the end listing all logged transactions, not a receipt per item.
+
 **Account defaulting:** Each user has their own accounts. **NEVER use another user's account.** When choosing an account:
 1. Query the user's accounts: `exec: curl -s -X GET "http://127.0.0.1:8000/v1/accounts?user_id=<user_id>" -H "X-API-Key: $FINANCE_API_KEY"`
 2. Pick the matching account from the result. You can send just the display name (e.g. `"Cash"`, `"BCA"`) — the backend will resolve it to the user's own account automatically.
@@ -231,7 +233,7 @@ When a user specifies an amount in a non-IDR currency (e.g. "spent 200 AUD", "ea
    exec: curl -s -X GET "http://127.0.0.1:8000/v1/convert?amount=788&from=AUD" -H "X-API-Key: $FINANCE_API_KEY"
    ```
    Response: `{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.698729, "result": 9417938}`
-3. Use the `result` as the transaction `amount`. **Never calculate the conversion yourself.**
+3. Use the `result` field directly as the transaction `amount`. **Never calculate the conversion yourself** — always call `/v1/convert` and use its `result`. The endpoint handles rounding to a whole number.
 4. Store `original_amount`, `original_currency`, and `exchange_rate` in `metadata`.
 5. Show the conversion in the receipt (see receipt format above).
 

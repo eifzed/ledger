@@ -103,9 +103,14 @@ class AccountBalance(BaseModel):
 
 
 class AdjustRequest(BaseModel):
-    amount: int
+    amount: float
     user_id: str
     note: str | None = None
+
+    @field_validator("amount", mode="after")
+    @classmethod
+    def round_amount_to_int(cls, v: float) -> int:
+        return round(v)
 
 
 # ── Category ──────────────────────────────────────────────────────────────────
@@ -134,7 +139,7 @@ class TransactionCreate(BaseModel):
     effective_at: datetime | None = None
     user_id: str
     transaction_type: TransactionType
-    amount: int = Field(..., gt=0)
+    amount: float = Field(..., gt=0)
     currency: str = "IDR"
     category_id: str | None = None
     description: str | None = None
@@ -144,6 +149,11 @@ class TransactionCreate(BaseModel):
     to_account_id: str | None = None
     note: str | None = None
     metadata: dict[str, Any] | None = None
+
+    @field_validator("amount", mode="after")
+    @classmethod
+    def round_amount_to_int(cls, v: float) -> int:
+        return round(v)
 
     @model_validator(mode="after")
     def validate_type_fields(self) -> TransactionCreate:
@@ -191,11 +201,11 @@ class TransactionCreate(BaseModel):
             )
         return self
 
-    @field_validator("amount")
+    @field_validator("amount", mode="before")
     @classmethod
-    def amount_must_be_positive(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("amount must be a positive integer")
+    def amount_must_be_positive(cls, v: Any) -> Any:
+        if isinstance(v, (int, float)) and v <= 0:
+            raise ValueError("amount must be positive")
         return v
 
 
