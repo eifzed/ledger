@@ -13,13 +13,13 @@ from app.models import Account, Category, Transaction, User
 from app.schemas import ErrorDetail, TransactionCreate, TransactionType
 from app.services import account_service, budget_service
 from app.services.budget_service import get_category_family
-from app.tz import col_as_jakarta, now_utc, to_jakarta, to_utc
+from app.tz import col_as_jakarta, now_utc, resolve_effective_at, to_jakarta, to_utc
 
 
 def create_transaction(db: Session, data: TransactionCreate) -> dict:
     _validate_references(db, data)
 
-    effective = to_utc(data.effective_at) if data.effective_at else now_utc()
+    effective = resolve_effective_at(data.effective_at, data.timezone, data.user_id)
     month = to_jakarta(effective).strftime("%Y-%m")
 
     txn = Transaction(
@@ -119,7 +119,7 @@ def correct_transaction(db: Session, txn_id: int, data: TransactionCreate) -> di
     db.flush()
 
     _validate_references(db, data)
-    effective = to_utc(data.effective_at) if data.effective_at else now_utc()
+    effective = resolve_effective_at(data.effective_at, data.timezone, data.user_id)
 
     new_txn = Transaction(
         effective_at=effective,

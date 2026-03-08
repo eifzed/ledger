@@ -137,6 +137,7 @@ class CategoryOut(BaseModel):
 
 class TransactionCreate(BaseModel):
     effective_at: datetime | None = None
+    timezone: str | None = None
     user_id: str
     transaction_type: TransactionType
     amount: float = Field(..., gt=0)

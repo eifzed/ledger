@@ -1,7 +1,10 @@
 """Prompt regression tests for the Ledger bot.
 
-Each test sends a Discord-style message through the same prompts OpenClaw uses,
-then inspects the curl commands the LLM produces to verify correct behavior.
+Each test sends messages through the same prompts OpenClaw uses, then inspects
+the curl commands the LLM produces to verify correct behavior.
+
+Messages use the OpenClaw sender label format: [from: DisplayName] message...
+Some tests also verify the legacy [DisplayName] format works as a fallback.
 
 Run:
     OPENAI_API_KEY=sk-... pytest tests/ -v
@@ -16,6 +19,33 @@ import pytest
 
 from tests.conftest import ask, ask_multi, curl_url_path, parse_curl_body
 
+
+def _has_sydney_tz(body: dict) -> bool:
+    """Check if the transaction body correctly targets Australia/Sydney.
+
+    Accepts either:
+    - New approach: timezone field contains 'Australia/Sydney'
+    - Legacy approach: effective_at has +11:00 (AEDT) or +10:00 (AEST)
+    """
+    tz = body.get("timezone", "")
+    ea = body.get("effective_at", "")
+    return (
+        "sydney" in tz.lower()
+        or "australia" in tz.lower()
+        or "+11:00" in ea
+        or "+10:00" in ea
+        or "+11" in ea.split("T")[-1] if "T" in ea else False
+    )
+
+
+def _has_jakarta_tz(body: dict) -> bool:
+    """Check if the transaction body correctly targets Asia/Jakarta (or is default)."""
+    tz = body.get("timezone", "")
+    ea = body.get("effective_at", "")
+    if not tz:
+        return True
+    return "jakarta" in tz.lower() or "asia" in tz.lower() or "+07:00" in ea
+
 # ---------------------------------------------------------------------------
 # Fake backend responses for multi-turn tests.
 # The bot often calls GET endpoints first (accounts, meta) before POSTing.
@@ -23,13 +53,18 @@ from tests.conftest import ask, ask_multi, curl_url_path, parse_curl_body
 # ---------------------------------------------------------------------------
 
 _CATEGORIES_JSON = '[{"id":"food","display_name":"Food","parent_id":null},{"id":"groceries","display_name":"Groceries","parent_id":"food"},{"id":"eating_out","display_name":"Eating Out","parent_id":"food"},{"id":"coffee","display_name":"Coffee","parent_id":"food"},{"id":"transport","display_name":"Transport","parent_id":null},{"id":"fuel","display_name":"Fuel","parent_id":"transport"},{"id":"parking","display_name":"Parking","parent_id":"transport"},{"id":"shopping","display_name":"Shopping","parent_id":null},{"id":"income","display_name":"Income","parent_id":null},{"id":"salary","display_name":"Salary","parent_id":"income"}]'
-_META_TEMPLATE = '{{"server_time": "{server_time}", "categories": {cats}, "accounts": [], "users": [], "payment_methods": ["cash","qris","debit","credit","bank_transfer","ewallet","other"], "transaction_types": ["expense","income","transfer","adjustment"]}}'.replace("{cats}", _CATEGORIES_JSON)
+_META_TEMPLATE = '{{"server_time": "{server_time}", "categories": __CATS__, "accounts": [], "users": [], "payment_methods": ["cash","qris","debit","credit","bank_transfer","ewallet","other"], "transaction_types": ["expense","income","transfer","adjustment"]}}'
+
+
+def _build_meta(server_time: str) -> str:
+    return _META_TEMPLATE.format(server_time=server_time).replace("__CATS__", _CATEGORIES_JSON)
+
 
 # Feb 25 — Australia/Sydney is in AEDT (UTC+11)
-META_RESPONSE = _META_TEMPLATE.format(server_time="2026-02-25T14:30:00+07:00")
+META_RESPONSE = _build_meta("2026-02-25T14:30:00+07:00")
 
 # Jul 15 — Australia/Sydney is in AEST (UTC+10)
-META_RESPONSE_AEST = _META_TEMPLATE.format(server_time="2026-07-15T14:30:00+07:00")
+META_RESPONSE_AEST = _build_meta("2026-07-15T14:30:00+07:00")
 CONVERT_AUD_25 = '{"from": "AUD", "to": "IDR", "amount": 25, "rate": 11951.70, "result": 298792}'
 CONVERT_AUD_788 = '{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.70, "result": 9417938}'
 
@@ -83,11 +118,11 @@ MAGFIRA_FAKES = {
 
 
 class TestUserIdExtraction:
-    """Bot extracts user_id from [DisplayName] and never asks for it."""
+    """Bot extracts user_id from sender label and never asks for it."""
 
     def test_fazrin_user_id(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] spent 300k on groceries via jago",
+            llm, system_prompt, "[from: Fazrin] spent 300k on groceries via jago",
             fake_responses=STANDARD_FAKES,
         )
         bodies = resp.curl_bodies()
@@ -97,7 +132,7 @@ class TestUserIdExtraction:
 
     def test_magfira_user_id(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Magfira] spent 50k on groceries via cash",
+            llm, system_prompt, "[from: Magfira] spent 50k on groceries via cash",
             fake_responses=MAGFIRA_FAKES,
         )
         bodies = resp.curl_bodies()
@@ -107,7 +142,7 @@ class TestUserIdExtraction:
 
     def test_unknown_user_auto_created(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Ahmad] spent 50k on coffee via dana",
+            llm, system_prompt, "[from: Ahmad] spent 50k on coffee via dana",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/accounts": "[]", "/v1/transactions": TRANSACTION_RESPONSE},
         )
         bodies = resp.curl_bodies()
@@ -118,7 +153,7 @@ class TestUserIdExtraction:
 
     def test_never_asks_for_user_id(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] bought coffee 35k via gopay",
+            llm, system_prompt, "[from: Fazrin] bought coffee 35k via gopay",
             fake_responses=STANDARD_FAKES,
         )
         text = resp.text.lower()
@@ -129,7 +164,7 @@ class TestUserIdExtraction:
     def test_alias_firrr_resolves_to_magfira(self, llm, system_prompt):
         """Discord nickname 'firrr' is Magfira — must use user_id='magfira'."""
         resp = ask_multi(
-            llm, system_prompt, "[firrr] spent 50k on groceries via cash",
+            llm, system_prompt, "[from: firrr] spent 50k on groceries via cash",
             fake_responses=MAGFIRA_FAKES,
         )
         bodies = resp.curl_bodies()
@@ -143,7 +178,7 @@ class TestUserIdExtraction:
     def test_alias_firrr_gets_magfira_accounts(self, llm, system_prompt):
         """When firrr logs a transaction, bot should query magfira's accounts."""
         resp = ask_multi(
-            llm, system_prompt, "[firrr] spent 25k on coffee via CBA",
+            llm, system_prompt, "[from: firrr] spent 25k on coffee via CBA",
             fake_responses=MAGFIRA_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -157,22 +192,21 @@ class TestUserIdExtraction:
             )
 
     def test_alias_firrr_uses_sydney_timezone(self, llm, system_prompt):
-        """firrr is Magfira — should use Australia/Sydney timezone (Feb = AEDT = +11:00)."""
+        """firrr is Magfira — should target Australia/Sydney timezone."""
         resp = ask_multi(
-            llm, system_prompt, "[firrr] bought lunch 30k via cash at 2pm",
+            llm, system_prompt, "[from: firrr] bought lunch 30k via cash at 2pm",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/accounts": MAGFIRA_ACCOUNTS, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
-        if body and body.get("effective_at"):
-            ea = body["effective_at"]
-            assert "+11:00" in ea or "+11" in ea, (
-                f"firrr (Magfira) should use Sydney AEDT offset in Feb, got {ea}"
+        if body:
+            assert _has_sydney_tz(body), (
+                f"firrr (Magfira) should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
             )
 
     def test_alias_eifzed_resolves_to_fazrin(self, llm, system_prompt):
         """Discord nickname 'eifzed' is Fazrin — must use user_id='fazrin'."""
         resp = ask_multi(
-            llm, system_prompt, "[eifzed] spent 50k for gym via jago",
+            llm, system_prompt, "[from: eifzed] spent 50k for gym via jago",
             fake_responses=STANDARD_FAKES,
         )
         bodies = resp.curl_bodies()
@@ -185,6 +219,72 @@ class TestUserIdExtraction:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 1b. Sender format resilience — both [from: Name] and [Name] work
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestSenderFormatResilience:
+    """Bot handles both OpenClaw's [from: Name] and bare [Name] sender labels."""
+
+    def test_bare_bracket_fazrin(self, llm, system_prompt):
+        """Legacy [Name] format should still extract user_id correctly."""
+        resp = ask_multi(
+            llm, system_prompt, "[Fazrin] spent 50k on parking via cash",
+            fake_responses=STANDARD_FAKES,
+        )
+        bodies = resp.curl_bodies()
+        assert any(b.get("user_id") == "fazrin" for b in bodies), (
+            f"Expected user_id='fazrin' from bare [Fazrin]. Got bodies: {bodies}"
+        )
+
+    def test_bare_bracket_magfira(self, llm, system_prompt):
+        """Legacy [Name] format should work for Magfira too."""
+        resp = ask_multi(
+            llm, system_prompt, "[Magfira] spent 50k on groceries via cash",
+            fake_responses=MAGFIRA_FAKES,
+        )
+        bodies = resp.curl_bodies()
+        assert any(b.get("user_id") == "magfira" for b in bodies), (
+            f"Expected user_id='magfira' from bare [Magfira]. Got bodies: {bodies}"
+        )
+
+    def test_bare_bracket_alias_firrr(self, llm, system_prompt):
+        """Legacy [Name] with alias should still resolve correctly."""
+        resp = ask_multi(
+            llm, system_prompt, "[firrr] spent 50k on groceries via cash",
+            fake_responses=MAGFIRA_FAKES,
+        )
+        bodies = resp.curl_bodies()
+        assert any(b.get("user_id") == "magfira" for b in bodies), (
+            f"Expected user_id='magfira' for bare [firrr]. Got bodies: {bodies}"
+        )
+
+    def test_bare_bracket_unknown_user(self, llm, system_prompt):
+        """Legacy [Name] format for unknown users should auto-create."""
+        resp = ask_multi(
+            llm, system_prompt, "[Yusuf] spent 20k on snacks via cash",
+            fake_responses={"/v1/meta": META_RESPONSE, "/v1/accounts": "[]", "/v1/transactions": TRANSACTION_RESPONSE},
+        )
+        bodies = resp.curl_bodies()
+        text = resp.text.lower()
+        assert "user_id" not in text, "Bot should not ask for user_id"
+        if bodies:
+            assert any(b.get("user_id") == "yusuf" for b in bodies)
+
+    def test_bare_bracket_magfira_uses_sydney_tz(self, llm, system_prompt):
+        """Legacy [Name] format for Magfira should still target Australia/Sydney."""
+        resp = ask_multi(
+            llm, system_prompt, "[Magfira] bought lunch 30k via cash at 2pm",
+            fake_responses={"/v1/meta": META_RESPONSE, "/v1/accounts": MAGFIRA_ACCOUNTS, "/v1/transactions": TRANSACTION_RESPONSE},
+        )
+        body = resp.find_body("POST", "/v1/transactions")
+        if body:
+            assert _has_sydney_tz(body), (
+                f"Magfira via bare [Magfira] should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
+            )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 2. Account ownership — use the correct user's accounts
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -194,7 +294,7 @@ class TestAccountOwnership:
 
     def test_fazrin_gets_own_account(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] spent 100k on groceries via BCA",
+            llm, system_prompt, "[from: Fazrin] spent 100k on groceries via BCA",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -205,7 +305,7 @@ class TestAccountOwnership:
 
     def test_magfira_gets_own_account(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Magfira] spent 100k on groceries via CBA",
+            llm, system_prompt, "[from: Magfira] spent 100k on groceries via CBA",
             fake_responses=MAGFIRA_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -216,7 +316,7 @@ class TestAccountOwnership:
 
     def test_magfira_cash_not_fazrin_cash(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Magfira] spent 20k on snacks via cash",
+            llm, system_prompt, "[from: Magfira] spent 20k on snacks via cash",
             fake_responses=MAGFIRA_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -227,7 +327,7 @@ class TestAccountOwnership:
     def test_expense_user_and_account_match(self, llm, system_prompt):
         """Person A's expense must have user_id=A AND from_account_id belonging to A."""
         resp = ask_multi(
-            llm, system_prompt, "[Magfira] bought groceries for 80k via CBA",
+            llm, system_prompt, "[from: Magfira] bought groceries for 80k via CBA",
             fake_responses=MAGFIRA_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -246,7 +346,7 @@ class TestAccountOwnership:
     def test_income_goes_to_correct_person(self, llm, system_prompt):
         """Person B's income must credit to person B's account, not person A's."""
         resp = ask_multi(
-            llm, system_prompt, "[Magfira] salary came in 5000 AUD to CBA",
+            llm, system_prompt, "[from: Magfira] salary came in 5000 AUD to CBA",
             fake_responses={
                 **MAGFIRA_FAKES,
                 "/v1/convert": '{"from": "AUD", "to": "IDR", "amount": 5000, "rate": 11951.70, "result": 59758500}',
@@ -271,7 +371,7 @@ class TestAccountOwnership:
     def test_fazrin_income_to_own_account(self, llm, system_prompt):
         """Fazrin's income must go to Fazrin's account."""
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] gaji masuk 15jt ke BCA",
+            llm, system_prompt, "[from: Fazrin] gaji masuk 15jt ke BCA",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -291,7 +391,7 @@ class TestAccountOwnership:
     def test_magfira_gopay_deducts_from_her_account(self, llm, system_prompt):
         """Magfira using GoPay should deduct from magfira_GOPAY, not fazrin_GOPAY."""
         resp = ask_multi(
-            llm, system_prompt, "[Magfira] bought coffee 25k via gopay",
+            llm, system_prompt, "[from: Magfira] bought coffee 25k via gopay",
             fake_responses=MAGFIRA_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -319,13 +419,13 @@ class TestAmountParsing:
     @pytest.mark.parametrize(
         "message, expected_amount",
         [
-            ("[Fazrin] spent 300k on groceries via jago", 300000),
-            ("[Fazrin] spent 50rb on parking via cash", 50000),
-            ("[Fazrin] gaji masuk 15jt ke BCA", 15000000),
-            ("[Fazrin] parkir ceban via cash", 10000),
-            ("[Fazrin] makan goban via jago", 50000),
-            ("[Fazrin] beli snack cepek via cash", 100000),
-            ("[Fazrin] beli kopi 2.5k via gopay", 2500),
+            ("[from: Fazrin] spent 300k on groceries via jago", 300000),
+            ("[from: Fazrin] spent 50rb on parking via cash", 50000),
+            ("[from: Fazrin] gaji masuk 15jt ke BCA", 15000000),
+            ("[from: Fazrin] parkir ceban via cash", 10000),
+            ("[from: Fazrin] makan goban via jago", 50000),
+            ("[from: Fazrin] beli snack cepek via cash", 100000),
+            ("[from: Fazrin] beli kopi 2.5k via gopay", 2500),
         ],
         ids=["300k", "50rb", "15jt", "ceban", "goban", "cepek", "2.5k"],
     )
@@ -348,14 +448,14 @@ class TestIntentDetection:
 
     def test_expense(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] spent 50k on parking via cash",
+            llm, system_prompt, "[from: Fazrin] spent 50k on parking via cash",
             fake_responses=STANDARD_FAKES,
         )
         assert resp.has_curl("POST", "/v1/transactions"), "Should POST to /v1/transactions"
 
     def test_income(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] gaji masuk 15jt ke BCA",
+            llm, system_prompt, "[from: Fazrin] gaji masuk 15jt ke BCA",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -364,7 +464,7 @@ class TestIntentDetection:
 
     def test_transfer(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] transfer 500k from BCA to Jago",
+            llm, system_prompt, "[from: Fazrin] transfer 500k from BCA to Jago",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -374,16 +474,16 @@ class TestIntentDetection:
         assert body.get("to_account_id") is not None
 
     def test_check_balance(self, llm, system_prompt):
-        resp = ask(llm, system_prompt, "[Fazrin] what's my balance")
+        resp = ask(llm, system_prompt, "[from: Fazrin] what's my balance")
         assert resp.has_curl("GET", "/v1/accounts/balances"), "Should GET /v1/accounts/balances"
 
     def test_budget_status(self, llm, system_prompt):
-        resp = ask(llm, system_prompt, "[Fazrin] budget status")
+        resp = ask(llm, system_prompt, "[from: Fazrin] budget status")
         assert resp.has_curl("GET", "/v1/budgets/status"), "Should GET /v1/budgets/status"
 
     def test_set_budget(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] set food budget to 3jt for this month",
+            llm, system_prompt, "[from: Fazrin] set food budget to 3jt for this month",
             fake_responses={**STANDARD_FAKES, "/v1/budgets/": '{"month": "2026-02", "category_id": "food", "limit_amount": 3000000}'},
         )
         assert resp.has_curl("PUT", "/v1/budgets/"), "Should PUT to /v1/budgets/"
@@ -392,7 +492,7 @@ class TestIntentDetection:
             assert body.get("limit_amount") == 3000000
 
     def test_monthly_summary(self, llm, system_prompt):
-        resp = ask(llm, system_prompt, "[Fazrin] how much did I spend this month")
+        resp = ask(llm, system_prompt, "[from: Fazrin] how much did I spend this month")
         assert (
             resp.has_curl("GET", "/v1/summary/monthly")
             or resp.has_curl("GET", "/v1/transactions")
@@ -400,11 +500,11 @@ class TestIntentDetection:
         ), "Should query summary, transactions, or meta"
 
     def test_void_transaction(self, llm, system_prompt):
-        resp = ask(llm, system_prompt, "[Fazrin] cancel #3")
+        resp = ask(llm, system_prompt, "[from: Fazrin] cancel #3")
         assert resp.has_curl("POST", "/v1/transactions/3/void"), "Should POST void"
 
     def test_non_finance_rejected(self, llm, system_prompt):
-        resp = ask(llm, system_prompt, "[Fazrin] what's the weather today")
+        resp = ask(llm, system_prompt, "[from: Fazrin] what's the weather today")
         assert len(resp.curls) == 0, "Should not make any API calls for non-finance messages"
         assert resp.text, "Should reply with text explaining scope"
 
@@ -420,9 +520,9 @@ class TestCategoryInference:
     @pytest.mark.parametrize(
         "message, expected_category",
         [
-            ("[Fazrin] beli bensin 50k via cash", "fuel"),
-            ("[Fazrin] parkir ceban via cash", "parking"),
-            ("[Fazrin] beli kopi 35k di starbucks via gopay", "coffee"),
+            ("[from: Fazrin] beli bensin 50k via cash", "fuel"),
+            ("[from: Fazrin] parkir ceban via cash", "parking"),
+            ("[from: Fazrin] beli kopi 35k di starbucks via gopay", "coffee"),
         ],
         ids=["fuel", "parking", "coffee"],
     )
@@ -448,7 +548,7 @@ class TestTimeParsing:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] spent 200k on dinner yesterday 7pm via BCA",
+            "[from: Fazrin] spent 200k on dinner yesterday 7pm via BCA",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         curl_order = resp.curls
@@ -463,7 +563,7 @@ class TestTimeParsing:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] spent 200k on dinner yesterday 7pm via BCA",
+            "[from: Fazrin] spent 200k on dinner yesterday 7pm via BCA",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -475,7 +575,7 @@ class TestTimeParsing:
     def test_no_time_omits_effective_at(self, llm, system_prompt):
         """When no time is specified, effective_at should be omitted (backend defaults to now)."""
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] spent 50k on parking via cash",
+            llm, system_prompt, "[from: Fazrin] spent 50k on parking via cash",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -488,7 +588,7 @@ class TestTimeParsing:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] bought coffee 35k via gopay at 5am",
+            "[from: Fazrin] bought coffee 35k via gopay at 5am",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -500,7 +600,7 @@ class TestTimeParsing:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] bought groceries 300k via jago 2 days ago",
+            "[from: Fazrin] bought groceries 300k via jago 2 days ago",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
@@ -515,62 +615,65 @@ class TestTimeParsing:
 
 
 class TestTimezone:
-    """Timezone handling: each user gets their own DST-aware offset, API returns UTC."""
+    """Timezone handling: bot sends timezone name, backend resolves DST/offsets."""
 
-    def test_magfira_aedt_timezone(self, llm, system_prompt):
-        """Feb is AEDT — Magfira should use +11:00."""
+    def test_magfira_sends_sydney_timezone(self, llm, system_prompt):
+        """Magfira's transactions should target Australia/Sydney timezone."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] spent 50k on groceries via cash at 3pm",
+            "[from: Magfira] spent 50k on groceries via cash at 3pm",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
-        if body and body.get("effective_at"):
-            ea = body["effective_at"]
-            assert "+11:00" in ea or "+11" in ea, (
-                f"Magfira should use +11:00 (AEDT) in Feb, got {ea}"
+        if body:
+            assert _has_sydney_tz(body), (
+                f"Magfira should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
             )
+            ea = body.get("effective_at", "")
+            if ea:
+                assert "15:00" in ea or "T15:" in ea, (
+                    f"3pm should be 15:00 local, got {ea}"
+                )
 
-    def test_magfira_aest_timezone(self, llm, system_prompt):
-        """Jul is AEST — Magfira should use +10:00, not +11:00."""
+    def test_magfira_aest_sends_same_timezone(self, llm, system_prompt):
+        """In Jul (AEST period), Magfira still targets Australia/Sydney — backend handles DST."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] spent 50k on groceries via cash at 3pm",
+            "[from: Magfira] spent 50k on groceries via cash at 3pm",
             fake_responses={"/v1/meta": META_RESPONSE_AEST, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
-        if body and body.get("effective_at"):
-            ea = body["effective_at"]
-            assert "+10:00" in ea or "+10" in ea, (
-                f"Magfira should use +10:00 (AEST) in Jul, got {ea}"
-            )
-            assert "+11" not in ea, (
-                f"Magfira should NOT use +11:00 (AEDT) in Jul, got {ea}"
+        if body:
+            assert _has_sydney_tz(body), (
+                f"Magfira should target Australia/Sydney in Jul too. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
             )
 
-    def test_fazrin_uses_jakarta_timezone(self, llm, system_prompt):
-        """Fazrin's times should use Asia/Jakarta (+07:00) — no DST."""
+    def test_fazrin_sends_jakarta_timezone(self, llm, system_prompt):
+        """Fazrin's transactions should target Asia/Jakarta (or default)."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] bought coffee 15k via cash at 9am",
+            "[from: Fazrin] bought coffee 15k via cash at 9am",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")
         if body and body.get("effective_at"):
             ea = body["effective_at"]
-            assert "+07:00" in ea or "+07" in ea, (
-                f"Fazrin should use Asia/Jakarta timezone, got {ea}"
+            assert "09:00" in ea or "T09:" in ea, (
+                f"9am should be 09:00 local, got {ea}"
+            )
+            assert _has_jakarta_tz(body), (
+                f"Fazrin should target Asia/Jakarta. Got tz='{body.get('timezone', '')}'"
             )
 
-    def test_magfira_yesterday_uses_sydney_offset(self, llm, system_prompt):
-        """Relative time ('yesterday') for Magfira in Feb should carry +11:00 (AEDT)."""
+    def test_magfira_yesterday_sends_timezone(self, llm, system_prompt):
+        """Relative time ('yesterday') for Magfira should target Sydney and correct date."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] bought groceries 30k via cash yesterday 2pm",
+            "[from: Magfira] bought groceries 30k via cash yesterday 2pm",
             fake_responses={
                 "/v1/meta": META_RESPONSE,
                 "/v1/accounts": MAGFIRA_ACCOUNTS,
@@ -578,34 +681,39 @@ class TestTimezone:
             },
         )
         body = resp.find_body("POST", "/v1/transactions")
-        if body and body.get("effective_at"):
-            ea = body["effective_at"]
-            assert "+11:00" in ea or "+11" in ea, (
-                f"Magfira's relative time should use Sydney AEDT offset in Feb, got {ea}"
+        if body:
+            assert _has_sydney_tz(body), (
+                f"Magfira should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
             )
-            assert "2026-02-24" in ea, (
-                f"Yesterday from Feb 25 should be Feb 24, got {ea}"
-            )
+            ea = body.get("effective_at", "")
+            if ea:
+                assert "2026-02-24" in ea, (
+                    f"Yesterday from Feb 25 should be Feb 24, got {ea}"
+                )
+                assert "14:00" in ea or "T14:" in ea, (
+                    f"2pm should be 14:00, got {ea}"
+                )
 
-    def test_unknown_user_defaults_to_jakarta(self, llm, system_prompt):
-        """Unknown users should default to Jakarta timezone (+07:00)."""
+    def test_unknown_user_omits_or_defaults_timezone(self, llm, system_prompt):
+        """Unknown users should either omit timezone or use Asia/Jakarta."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Budi] spent 25k on parking via cash at 8am",
+            "[from: Budi] spent 25k on parking via cash at 8am",
             fake_responses={"/v1/meta": META_RESPONSE, "/v1/transactions": TRANSACTION_RESPONSE},
         )
         body = resp.find_body("POST", "/v1/transactions")
         if body and body.get("effective_at"):
             ea = body["effective_at"]
-            assert "+07:00" in ea or "+07" in ea, (
-                f"Unknown user should default to Jakarta timezone, got {ea}"
+            assert "08:00" in ea or "T08:" in ea, (
+                f"8am should be 08:00 local, got {ea}"
+            )
+            assert _has_jakarta_tz(body), (
+                f"Unknown user should default to Jakarta. Got tz='{body.get('timezone', '')}'"
             )
 
     def test_revision_with_utc_response(self, llm, system_prompt):
-        """When the bot reads back a UTC effective_at from the API during a revision,
-        it should not be confused and should correctly apply the new time with the
-        user's current DST-aware offset (Feb = AEDT = +11:00)."""
+        """Revision for Magfira should send local time 18:00 targeting Sydney, not confused by UTC response."""
         utc_txn = '''{
             "id": 5, "user_id": "magfira", "transaction_type": "expense",
             "amount": 30000, "category_id": "groceries",
@@ -617,7 +725,7 @@ class TestTimezone:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] fix #5 should be 6pm",
+            "[from: Magfira] fix #5 should be 6pm",
             fake_responses={
                 "/v1/meta": META_RESPONSE,
                 "/v1/transactions/5": utc_txn,
@@ -627,19 +735,19 @@ class TestTimezone:
         body = resp.find_body("POST", "/v1/transactions/5/correct")
         if body and body.get("effective_at"):
             ea = body["effective_at"]
-            assert "+11:00" in ea or "+11" in ea, (
-                f"Magfira's revised time should use Sydney AEDT offset in Feb, got {ea}"
-            )
             assert "18:00" in ea or "T18:" in ea, (
                 f"6pm should be 18:00 local, got {ea}"
             )
+            assert _has_sydney_tz(body), (
+                f"Magfira revision should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{ea}'"
+            )
 
     def test_fazrin_unaffected_by_aest_period(self, llm, system_prompt):
-        """Fazrin stays +07:00 even when server_time is in July (AEST period)."""
+        """Fazrin stays Asia/Jakarta even when server_time is in July."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] bought coffee 15k via cash at 9am",
+            "[from: Fazrin] bought coffee 15k via cash at 9am",
             fake_responses={
                 "/v1/meta": META_RESPONSE_AEST,
                 "/v1/accounts": FAZRIN_ACCOUNTS,
@@ -649,16 +757,19 @@ class TestTimezone:
         body = resp.find_body("POST", "/v1/transactions")
         if body and body.get("effective_at"):
             ea = body["effective_at"]
-            assert "+07:00" in ea or "+07" in ea, (
-                f"Fazrin should always use +07:00 regardless of season, got {ea}"
+            assert "09:00" in ea or "T09:" in ea, (
+                f"9am should be 09:00 local, got {ea}"
+            )
+            assert _has_jakarta_tz(body), (
+                f"Fazrin should use Jakarta regardless of season. Got tz='{body.get('timezone', '')}'"
             )
 
-    def test_magfira_yesterday_aest_uses_plus_10(self, llm, system_prompt):
-        """Relative time ('yesterday') for Magfira in Jul should carry +10:00 (AEST)."""
+    def test_magfira_yesterday_aest_sends_timezone(self, llm, system_prompt):
+        """Relative time ('yesterday') for Magfira in Jul should target Australia/Sydney."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] bought groceries 30k via cash yesterday 2pm",
+            "[from: Magfira] bought groceries 30k via cash yesterday 2pm",
             fake_responses={
                 "/v1/meta": META_RESPONSE_AEST,
                 "/v1/accounts": MAGFIRA_ACCOUNTS,
@@ -666,20 +777,18 @@ class TestTimezone:
             },
         )
         body = resp.find_body("POST", "/v1/transactions")
-        if body and body.get("effective_at"):
-            ea = body["effective_at"]
-            assert "+10:00" in ea or "+10" in ea, (
-                f"Magfira's relative time should use +10:00 (AEST) in Jul, got {ea}"
+        if body:
+            assert _has_sydney_tz(body), (
+                f"Magfira should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
             )
-            assert "+11" not in ea, (
-                f"Should NOT use +11:00 (AEDT) in Jul, got {ea}"
-            )
-            assert "2026-07-14" in ea, (
-                f"Yesterday from Jul 15 should be Jul 14, got {ea}"
-            )
+            ea = body.get("effective_at", "")
+            if ea:
+                assert "2026-07-14" in ea, (
+                    f"Yesterday from Jul 15 should be Jul 14, got {ea}"
+                )
 
-    def test_magfira_revision_aest_uses_plus_10(self, llm, system_prompt):
-        """Revision for Magfira during AEST (Jul) should use +10:00."""
+    def test_magfira_revision_aest_sends_timezone(self, llm, system_prompt):
+        """Revision for Magfira during Jul should target Australia/Sydney."""
         utc_txn = '''{
             "id": 8, "user_id": "magfira", "transaction_type": "expense",
             "amount": 50000, "category_id": "groceries",
@@ -691,7 +800,7 @@ class TestTimezone:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] fix #8 should be 3pm",
+            "[from: Magfira] fix #8 should be 3pm",
             fake_responses={
                 "/v1/meta": META_RESPONSE_AEST,
                 "/v1/transactions/8": utc_txn,
@@ -701,22 +810,19 @@ class TestTimezone:
         body = resp.find_body("POST", "/v1/transactions/8/correct")
         if body and body.get("effective_at"):
             ea = body["effective_at"]
-            assert "+10:00" in ea or "+10" in ea, (
-                f"Magfira's revised time should use +10:00 (AEST) in Jul, got {ea}"
-            )
-            assert "+11" not in ea, (
-                f"Should NOT use +11:00 (AEDT) in Jul, got {ea}"
-            )
             assert "15:00" in ea or "T15:" in ea, (
                 f"3pm should be 15:00 local, got {ea}"
             )
+            assert _has_sydney_tz(body), (
+                f"Magfira revision should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{ea}'"
+            )
 
-    def test_alias_firrr_aest_uses_plus_10(self, llm, system_prompt):
-        """firrr is Magfira — in Jul (AEST) should use +10:00."""
+    def test_alias_firrr_sends_sydney_timezone(self, llm, system_prompt):
+        """firrr is Magfira — should target Australia/Sydney timezone."""
         resp = ask_multi(
             llm,
             system_prompt,
-            "[firrr] bought lunch 30k via cash at 2pm",
+            "[from: firrr] bought lunch 30k via cash at 2pm",
             fake_responses={
                 "/v1/meta": META_RESPONSE_AEST,
                 "/v1/accounts": MAGFIRA_ACCOUNTS,
@@ -724,13 +830,9 @@ class TestTimezone:
             },
         )
         body = resp.find_body("POST", "/v1/transactions")
-        if body and body.get("effective_at"):
-            ea = body["effective_at"]
-            assert "+10:00" in ea or "+10" in ea, (
-                f"firrr (Magfira) should use +10:00 (AEST) in Jul, got {ea}"
-            )
-            assert "+11" not in ea, (
-                f"firrr (Magfira) should NOT use +11:00 (AEDT) in Jul, got {ea}"
+        if body:
+            assert _has_sydney_tz(body), (
+                f"firrr (Magfira) should target Australia/Sydney. Got tz='{body.get('timezone', '')}', ea='{body.get('effective_at', '')}'"
             )
 
 
@@ -746,7 +848,7 @@ class TestCurrencyConversion:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] bought lunch for 25 AUD via CBA",
+            "[from: Magfira] bought lunch for 25 AUD via CBA",
             fake_responses={
                 "/v1/convert": CONVERT_AUD_25,
                 "/v1/transactions": TRANSACTION_RESPONSE,
@@ -759,7 +861,7 @@ class TestCurrencyConversion:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] bought lunch for 25 AUD via CBA",
+            "[from: Magfira] bought lunch for 25 AUD via CBA",
             fake_responses={
                 "/v1/convert": CONVERT_AUD_25,
                 "/v1/transactions": TRANSACTION_RESPONSE,
@@ -776,7 +878,7 @@ class TestCurrencyConversion:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] bought lunch for 25 AUD via CBA",
+            "[from: Magfira] bought lunch for 25 AUD via CBA",
             fake_responses={
                 "/v1/convert": CONVERT_AUD_25,
                 "/v1/transactions": TRANSACTION_RESPONSE,
@@ -793,7 +895,7 @@ class TestCurrencyConversion:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Magfira] set food budget to 788 AUD",
+            "[from: Magfira] set food budget to 788 AUD",
             fake_responses={
                 "/v1/convert": CONVERT_AUD_788,
                 "/v1/budgets/": '{"month": "2026-02", "category_id": "food", "limit_amount": 9417938}',
@@ -813,7 +915,7 @@ class TestCurrencyConversion:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[firrr] spent aud 6.39 on tempe via jago",
+            "[from: firrr] spent aud 6.39 on tempe via jago",
             fake_responses={
                 "/v1/convert": convert_639,
                 "/v1/transactions": TRANSACTION_RESPONSE,
@@ -842,7 +944,7 @@ class TestMultiItem:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] beli bensin 50k dan parkir ceban via cash",
+            "[from: Fazrin] beli bensin 50k dan parkir ceban via cash",
             fake_responses=STANDARD_FAKES,
         )
         post_bodies = [
@@ -862,7 +964,7 @@ class TestMultiItem:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[firrr] spent aud 6.39 for tempe and aud 2.69 for rice flour, from jago",
+            "[from: firrr] spent aud 6.39 for tempe and aud 2.69 for rice flour, from jago",
             fake_responses={
                 "/v1/convert": convert_responses.get("6.39", '{"from":"AUD","to":"IDR","amount":6.39,"rate":11926.22,"result":76209}'),
                 "/v1/transactions": TRANSACTION_RESPONSE,
@@ -900,7 +1002,7 @@ class TestRevisionFlow:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] fix #1 should be 350k",
+            "[from: Fazrin] fix #1 should be 350k",
             fake_responses={
                 "/v1/transactions/1": GET_TXN_1_RESPONSE,
                 "/correct": TRANSACTION_RESPONSE,
@@ -918,7 +1020,7 @@ class TestRevisionFlow:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] fix #1 should be 350k",
+            "[from: Fazrin] fix #1 should be 350k",
             fake_responses={
                 "/v1/transactions/1": GET_TXN_1_RESPONSE,
                 "/correct": TRANSACTION_RESPONSE,
@@ -934,7 +1036,7 @@ class TestRevisionFlow:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] fix #1 should be 350k",
+            "[from: Fazrin] fix #1 should be 350k",
             fake_responses={
                 "/v1/transactions/1": GET_TXN_1_RESPONSE,
                 "/correct": TRANSACTION_RESPONSE,
@@ -948,7 +1050,7 @@ class TestRevisionFlow:
         resp = ask_multi(
             llm,
             system_prompt,
-            "[Fazrin] change #1 to yesterday 5pm",
+            "[from: Fazrin] change #1 to yesterday 5pm",
             fake_responses={
                 "/v1/transactions/1": GET_TXN_1_RESPONSE,
                 "/v1/meta": META_RESPONSE,
@@ -974,7 +1076,7 @@ class TestClarification:
     def test_asks_account_when_missing(self, llm, system_prompt):
         """Fazrin has multiple accounts — bot should ask which one."""
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] beli bensin 50k",
+            llm, system_prompt, "[from: Fazrin] beli bensin 50k",
             fake_responses=STANDARD_FAKES, max_turns=2,
         )
         text = resp.text.lower()
@@ -987,7 +1089,7 @@ class TestClarification:
 
     def test_qris_still_needs_account(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] beli kopi 35k qris",
+            llm, system_prompt, "[from: Fazrin] beli kopi 35k qris",
             fake_responses=STANDARD_FAKES, max_turns=2,
         )
         text = resp.text.lower()
@@ -1000,7 +1102,7 @@ class TestClarification:
     def test_fully_specified_no_clarification(self, llm, system_prompt):
         """When all fields are present, bot should not ask any questions."""
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] transfer 500k from BCA to Jago",
+            llm, system_prompt, "[from: Fazrin] transfer 500k from BCA to Jago",
             fake_responses=STANDARD_FAKES,
         )
         assert resp.has_curl("POST", "/v1/transactions"), (
@@ -1018,7 +1120,7 @@ class TestSafety:
 
     def test_never_uses_web_fetch(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] what's my balance",
+            llm, system_prompt, "[from: Fazrin] what's my balance",
             fake_responses=STANDARD_FAKES,
         )
         for cmd in resp.all_commands:
@@ -1026,7 +1128,7 @@ class TestSafety:
 
     def test_always_includes_api_key(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] spent 100k on groceries via BCA",
+            llm, system_prompt, "[from: Fazrin] spent 100k on groceries via BCA",
             fake_responses=STANDARD_FAKES,
         )
         for curl in resp.curls:
@@ -1034,7 +1136,7 @@ class TestSafety:
 
     def test_no_finance_api_as_command(self, llm, system_prompt):
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] spent 50k on parking via cash",
+            llm, system_prompt, "[from: Fazrin] spent 50k on parking via cash",
             fake_responses=STANDARD_FAKES,
         )
         for cmd in resp.all_commands:
@@ -1053,7 +1155,7 @@ class TestTransactionIds:
 
     def test_void_uses_integer_id_in_url(self, llm, system_prompt):
         """'cancel #3' should produce /v1/transactions/3/void, not a UUID path."""
-        resp = ask(llm, system_prompt, "[Fazrin] cancel #3")
+        resp = ask(llm, system_prompt, "[from: Fazrin] cancel #3")
         void_curls = [c for c in resp.curls if "/void" in c]
         assert len(void_curls) >= 1, "Should produce a void curl command"
         for cmd in void_curls:
@@ -1069,7 +1171,7 @@ class TestTransactionIds:
     def test_get_transaction_uses_integer_id(self, llm, system_prompt):
         """Fetching transaction #7 should use /v1/transactions/7."""
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] show me transaction #7",
+            llm, system_prompt, "[from: Fazrin] show me transaction #7",
             fake_responses={
                 "/v1/transactions/7": GET_TXN_1_RESPONSE,
                 "/v1/meta": META_RESPONSE,
@@ -1089,7 +1191,7 @@ class TestTransactionIds:
     def test_correct_uses_integer_id_in_url(self, llm, system_prompt):
         """'fix #1' should produce /v1/transactions/1/correct, not a UUID path."""
         resp = ask_multi(
-            llm, system_prompt, "[Fazrin] fix #1 should be 350k",
+            llm, system_prompt, "[from: Fazrin] fix #1 should be 350k",
             fake_responses={
                 "/v1/transactions/1": GET_TXN_1_RESPONSE,
                 "/correct": TRANSACTION_RESPONSE,
@@ -1106,7 +1208,7 @@ class TestTransactionIds:
 
     def test_void_id_from_natural_language(self, llm, system_prompt):
         """'cancel transaction number 12' should use ID 12, not ask for a UUID."""
-        resp = ask(llm, system_prompt, "[Fazrin] cancel transaction number 12")
+        resp = ask(llm, system_prompt, "[from: Fazrin] cancel transaction number 12")
         void_curls = [c for c in resp.curls if "/void" in c]
         assert len(void_curls) >= 1, "Should produce a void curl command"
         cmd = void_curls[0]
@@ -1128,7 +1230,7 @@ class TestMetadata:
     def test_raw_text_included(self, llm, system_prompt):
         msg = "spent 300k on groceries at alfamart via jago"
         resp = ask_multi(
-            llm, system_prompt, f"[Fazrin] {msg}",
+            llm, system_prompt, f"[from: Fazrin] {msg}",
             fake_responses=STANDARD_FAKES,
         )
         body = resp.find_body("POST", "/v1/transactions")

@@ -55,10 +55,15 @@ Budgets can only be set on **parent** categories (e.g. `food`, not `groceries`).
 |---|---|---|
 | `50k`, `50rb` | 50 ribu | 50000 |
 | `2.5k` | 2.5 ribu | 2500 |
+| `1jt`, `sejuta` | 1 juta | 1000000 |
 | `1.5jt` | 1.5 juta | 1500000 |
+| `gopek` | slang 500 | 500 |
+| `seceng` | slang 1k | 1000 |
+| `goceng` | slang 5k | 5000 |
 | `ceban` | slang 10k | 10000 |
 | `goban` | slang 50k | 50000 |
 | `cepek` | slang 100k | 100000 |
+| `nopek` | slang 900k | 900000 |
 
 ## Payment Methods
 

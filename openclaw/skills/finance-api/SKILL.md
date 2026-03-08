@@ -35,6 +35,8 @@ curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_
   "description": "detergent",
   "merchant": "Indomaret",
   "payment_method": "qris",
+  "effective_at": "2026-02-25T14:00:00",
+  "timezone": "Asia/Jakarta",
   "metadata": {"raw_text": "beli detergent 65k qris bca"}
 }'
 ```
@@ -47,7 +49,9 @@ Account IDs are per-user (e.g. `fazrin_BCA`, `magfira_CBA`). The backend auto-re
 - **transfer**: `user_id`, `transaction_type`, `amount`, `from_account_id`, `to_account_id`
 - **adjustment**: `user_id`, `transaction_type`, `amount`
 
-**Optional fields:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash|qris|debit|credit|bank_transfer|ewallet|other), `note`, `metadata`, `effective_at` (ISO 8601, defaults to now).
+**Optional fields:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash|qris|debit|credit|bank_transfer|ewallet|other), `note`, `metadata`, `effective_at` (ISO 8601 local time without offset, defaults to now), `timezone` (IANA timezone name — **always include this** when `effective_at` is set; see USER.md for each user's timezone).
+
+**IMPORTANT:** When setting `effective_at`, always include `timezone` so the backend converts correctly. Use `"Asia/Jakarta"` for Fazrin, `"Australia/Sydney"` for Magfira (see USER.md). The backend handles DST automatically.
 
 **Response** includes: `transaction` (with integer `id` — always show it as `#id` in receipts), `balances`, `budget_status`, `warnings`.
 
