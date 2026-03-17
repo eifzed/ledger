@@ -2,214 +2,26 @@
 name: finance-api
 description: Household finance API — log transactions, manage budgets, check balances, and get summaries.
 user-invocable: false
-metadata: {"openclaw":{"requires":{"env":["FINANCE_API_KEY"]},"primaryEnv":"FINANCE_API_KEY"}}
+metadata: {"openclaw":{"requires":{"env":["FINANCE_API_KEY"]},"primaryEnv":"FINANCE_API_KEY","mcp":true}}
 ---
 
-# Finance API
+# Finance API — MCP Tools
 
-Household finance backend. All calls go through `exec` with `curl`.
+All tools are self-documented via their MCP schemas (parameter names, types, descriptions, and required fields). Call them directly with typed arguments.
 
-**Base URL:** `http://127.0.0.1:8000`
+## Domain Rules
 
-Every request needs the API key header. Use this pattern for ALL calls:
+- **Account IDs** are per-user (e.g. `fazrin_BCA`). Send just the display name (e.g. `"BCA"`) — the backend resolves it to the user's own account.
+- **Budgets** can only target **parent** categories (e.g. `food`, not `groceries`).
+- **`effective_at`** must always be paired with **`timezone`** (IANA name). The backend handles UTC conversion and DST.
+- **`convert_currency`**: use the `result` field directly — never calculate conversions manually.
+- **`correct_transaction`**: always fetch the original first, copy all fields, override only what changed.
 
-```bash
-curl -s -X <METHOD> "http://127.0.0.1:8000<PATH>" -H "X-API-Key: $FINANCE_API_KEY" [-H "Content-Type: application/json" -d '<JSON_BODY>']
-```
+## Error Codes
 
-**CRITICAL:** Always use `exec` with `curl` as shown above. Never use `web_fetch` — it cannot send the required `X-API-Key` header.
-
----
-
-## Transactions
-
-### Create transaction
-
-```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/transactions" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{
-  "user_id": "fazrin",
-  "transaction_type": "expense",
-  "amount": 65000,
-  "category_id": "groceries",
-  "from_account_id": "fazrin_BCA",
-  "description": "detergent",
-  "merchant": "Indomaret",
-  "payment_method": "qris",
-  "effective_at": "2026-02-25T14:00:00",
-  "timezone": "Asia/Jakarta",
-  "metadata": {"raw_text": "beli detergent 65k qris bca"}
-}'
-```
-
-Account IDs are per-user (e.g. `fazrin_BCA`, `magfira_CBA`). The backend auto-resolves unprefixed names — you can send `"BCA"` or `"Cash"` and it will resolve to the correct user's account (e.g. `magfira_CASH` for user magfira). The backend also rejects attempts to use another user's account. Use `GET /v1/accounts?user_id=<user_id>` to see the user's accounts.
-
-**Required fields by type:**
-- **expense**: `user_id`, `transaction_type`, `amount`, `category_id`, `from_account_id` (`to_account_id` must be null)
-- **income**: `user_id`, `transaction_type`, `amount`, `to_account_id`
-- **transfer**: `user_id`, `transaction_type`, `amount`, `from_account_id`, `to_account_id`
-- **adjustment**: `user_id`, `transaction_type`, `amount`
-
-**Optional fields:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash|qris|debit|credit|bank_transfer|ewallet|other), `note`, `metadata`, `effective_at` (ISO 8601 local time without offset, defaults to now), `timezone` (IANA timezone name — **always include this** when `effective_at` is set; see USER.md for each user's timezone).
-
-**IMPORTANT:** When setting `effective_at`, always include `timezone` so the backend converts correctly. Use `"Asia/Jakarta"` for Fazrin, `"Australia/Sydney"` for Magfira (see USER.md). The backend handles DST automatically.
-
-**Response** includes: `transaction` (with integer `id` — always show it as `#id` in receipts), `balances`, `budget_status`, `warnings`.
-
-### List transactions
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/transactions?month=2026-02&user_id=fazrin&limit=10" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Query params: `month` (YYYY-MM), `category_id`, `user_id`, `account_id`, `search`, `limit` (1-200, default 50), `offset` (default 0).
-
-### Get single transaction
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/transactions/42" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Transaction IDs are auto-incrementing integers (1, 2, 3, ...).
-
-### Void transaction
-
-```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/void" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Irreversibly sets status to "voided" and reverses balance effects.
-
-### Correct transaction
-
-```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/transactions/42/correct" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{
-  "user_id": "fazrin",
-  "transaction_type": "expense",
-  "amount": 75000,
-  "category_id": "groceries",
-  "from_account_id": "BCA"
-}'
-```
-
-Voids the original and creates a replacement. Body is the same schema as create.
-
----
-
-## Budgets
-
-### Get budget status
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/budgets/status?month=2026-02" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Returns usage, remaining, percent, and warnings per category. `month` defaults to current month if omitted.
-
-### List budgets
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/budgets?month=2026-02" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-### Upsert budget
-
-```bash
-curl -s -X PUT "http://127.0.0.1:8000/v1/budgets/2026-02/food" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"limit_amount": 3000000}'
-```
-
-Path: `/v1/budgets/{month}/{category_id}`. Only parent categories allowed. Optional `scope_user_id` (null = household).
-
-### Budget history
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/budgets/history?month=2026-02&limit=50" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
----
-
-## Accounts
-
-Accounts are per-user. Each account has an `owner_id` field. Use `?user_id=` to filter.
-
-### Get balances
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/accounts/balances?user_id=fazrin" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Omit `user_id` for all accounts (household view).
-
-### List accounts
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/accounts?user_id=fazrin" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-### Create account
-
-```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/accounts" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"id": "fazrin_DANA", "display_name": "Dana", "type": "ewallet", "owner_id": "fazrin"}'
-```
-
-Types: `bank`, `cash`, `ewallet`, `credit_card`, `other`. Always set `owner_id` to the user who owns the account.
-
-### Adjust balance
-
-```bash
-curl -s -X POST "http://127.0.0.1:8000/v1/accounts/fazrin_BCA/adjust" -H "X-API-Key: $FINANCE_API_KEY" -H "Content-Type: application/json" -d '{"amount": 5000000, "user_id": "fazrin", "note": "Initial balance"}'
-```
-
-Positive = credit, negative = debit.
-
----
-
-## Summary & Metadata
-
-### Monthly summary
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/summary/monthly?month=2026-02&user_id=fazrin" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Omit `user_id` for household-wide summary.
-
-Returns: `total_expenses`, `total_income`, `net`, `by_category`, `by_user`, `daily_totals`, `top_merchants`, `budget_status`, `warnings`.
-
-### Get metadata
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/meta" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Returns all categories, accounts, users, payment methods, transaction types, and server time. Call this to discover valid IDs.
-
-### Currency conversion
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/v1/convert?amount=788&from=AUD" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
-Query params: `amount` (required), `from` (required, 3-letter currency code), `to` (optional, default IDR).
-
-Response: `{"from": "AUD", "to": "IDR", "amount": 788, "rate": 11951.698729, "result": 9417938}`. Use `result` directly as the IDR amount — never calculate it yourself.
-
-### Health check
-
-```bash
-curl -s -X GET "http://127.0.0.1:8000/health" -H "X-API-Key: $FINANCE_API_KEY"
-```
-
----
-
-## Error responses
-
-```json
-{"error": {"code": "NEEDS_CLARIFICATION", "message": "...", "details": [{"field": "from_account_id", "question": "Which account did you pay from?"}]}}
-```
-
-- `NEEDS_CLARIFICATION` → relay the `question` to the user
-- `VALIDATION_ERROR` → fix the request
-- `NOT_FOUND` → resource doesn't exist
-- `DUPLICATE` → resource already exists
-
-Never show raw JSON errors to users.
+| Code | Action |
+|---|---|
+| `NEEDS_CLARIFICATION` | Relay the `question` to the user with options |
+| `VALIDATION_ERROR` | Fix the request and retry once |
+| `NOT_FOUND` | Resource doesn't exist |
+| `DUPLICATE` | Resource already exists |

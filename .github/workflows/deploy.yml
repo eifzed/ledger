@@ -19,19 +19,27 @@ jobs:
           script: |
             cd ${{ secrets.APP_DIR }}
             git pull origin main
+
+            # --- FastAPI (Docker) — serves the dashboard ---
             docker compose down
             docker compose up -d --build
 
-            # Sync OpenClaw prompt files and skills
+            # --- MCP server (host venv) — serves OpenClaw ---
+            # The MCP server runs on the host, spawned by OpenClaw via stdio.
+            # It shares the same SQLite database as the Docker container.
+            if [ ! -d .venv ]; then
+              python3 -m venv .venv
+            fi
+            .venv/bin/pip install -q -r requirements.txt
+
+            # --- Sync OpenClaw prompt files and skills ---
             OPENCLAW_WS=${{ secrets.OPENCLAW_WORKSPACE }}
             cp openclaw/prompt/*.md "$OPENCLAW_WS/"
             mkdir -p "$OPENCLAW_WS/skills/finance-api/tools"
             cp openclaw/skills/finance-api/SKILL.md "$OPENCLAW_WS/skills/finance-api/"
-            cp openclaw/skills/finance-api/api.sh "$OPENCLAW_WS/skills/finance-api/"
-            chmod +x "$OPENCLAW_WS/skills/finance-api/api.sh"
             cp openclaw/skills/finance-api/tools/*.json "$OPENCLAW_WS/skills/finance-api/tools/"
 
-            # Restart OpenClaw gateway and clear Discord sessions
+            # --- Restart OpenClaw gateway and clear Discord sessions ---
             export PATH=/home/ubuntu/.npm-global/bin:$PATH
             openclaw gateway restart
             python3 -c "

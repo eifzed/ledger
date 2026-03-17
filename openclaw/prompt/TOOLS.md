@@ -1,14 +1,8 @@
-# TOOLS.md — Finance API Cheat Sheet
-
-## API Connection
-- **Base URL:** `http://127.0.0.1:8000`
-- **Auth:** `X-API-Key` header (via `$FINANCE_API_KEY`)
-- **Skill:** `finance-api` — read its SKILL.md for curl patterns and tool JSON definitions for endpoint schemas
-- **Timezone:** All stored datetimes are **UTC**. API responses return UTC (`+00:00`). Send `effective_at` with the user's local timezone offset — the backend converts to UTC automatically.
+# TOOLS.md — Reference Data
 
 ## Accounts
 
-Each user has their own copy of every account. Account IDs are prefixed with the user's ID:
+Each user has their own accounts. Account IDs are prefixed with the user's ID:
 
 | Suffix | Name | Type |
 |---|---|---|
@@ -19,13 +13,7 @@ Each user has their own copy of every account. Account IDs are prefixed with the
 | `GOPAY` | GoPay | ewallet |
 | `OVO` | OVO | ewallet |
 
-Every known user gets all of the above (e.g. `fazrin_BCA`, `magfira_BCA`, `fazrin_CBA`, `magfira_CBA`, etc.).
-
-When a user logs a transaction, **always use their own accounts**. The backend enforces this — using another user's account will be rejected.
-
-You can send just the display name (e.g. `"Cash"`, `"BCA"`) as the account ID and the backend will auto-resolve it to the user's prefixed account (e.g. `"Cash"` → `magfira_CASH` for user magfira).
-
-Call `GET /v1/accounts?user_id=<user_id>` to see a user's accounts. New users won't have accounts yet — ask them to create one.
+Every known user gets all of the above (e.g. `fazrin_BCA`, `magfira_BCA`). Send just the display name (e.g. `"Cash"`, `"BCA"`) — the backend resolves it.
 
 If the user says QRIS, the *payment_method* is `qris` — but you still need to know which account was charged.
 

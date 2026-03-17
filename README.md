@@ -1,18 +1,21 @@
 # Ledger
 
-Household finance tracker with a FastAPI backend, web dashboard, and a Discord bot powered by [OpenClaw](https://docs.openclaw.ai). SQLite is the single source of truth — all calculations (balances, budgets, summaries) happen server-side.
+Household finance tracker with a Discord bot powered by [OpenClaw](https://docs.openclaw.ai), a web dashboard, and SQLite as the single source of truth. All calculations (balances, budgets, summaries) happen server-side.
 
 ## Architecture
 
 ```
-Discord ──► OpenClaw Gateway ──► exec: curl ──► FastAPI Backend ──► SQLite
-                                                     │
-                                          Web Dashboard (SSR)
+Discord ──► OpenClaw Gateway ──► MCP server (stdio) ──► Service Layer ──► SQLite
+                                                                            │
+                                              Web Dashboard (SSR) ◄── FastAPI Routes ◄──┘
 ```
 
-- **FastAPI Backend** — RESTful API for transactions, accounts, budgets, summaries. Authenticated with `X-API-Key` header.
-- **Web Dashboard** — Server-rendered HTML pages (Jinja2) for viewing data in a browser.
-- **OpenClaw** — AI agent platform that connects to Discord. It reads system prompt files and a custom `finance-api` skill to translate natural language into API calls.
+Two paths into the same data:
+
+- **MCP server** (`mcp_server.py`) — Exposes the service layer as structured [MCP](https://modelcontextprotocol.io) tools. OpenClaw spawns it as a child process via stdio transport. The AI agent calls typed tools directly — no HTTP, no shell commands, no `curl`.
+- **FastAPI** (`app/`) — RESTful API (`X-API-Key` auth) and server-rendered dashboard (Jinja2). Runs in Docker. Shares the same SQLite database and service layer as the MCP server.
+
+Both paths call the same service functions (`app/services/`), so business logic is never duplicated.
 
 ---
 
@@ -44,7 +47,7 @@ Edit `.env`:
 | `LEDGER_DASH_PASS` | Dashboard login password | `change-me` |
 | `LEDGER_SECRET_KEY` | Session signing key | `ledger-secret-change-me` |
 
-### 3. Run
+### 3. Run the FastAPI server (dashboard + REST API)
 
 ```bash
 uvicorn app.main:app --reload --port 8000
@@ -52,7 +55,15 @@ uvicorn app.main:app --reload --port 8000
 
 The server auto-creates the SQLite DB and seeds default users, categories, and accounts on first run.
 
-### 4. Dashboard
+### 4. Run the MCP server (for AI agent)
+
+```bash
+python mcp_server.py
+```
+
+This starts the MCP server on stdio transport. In practice, OpenClaw spawns it automatically — you only run it manually for testing.
+
+### 5. Dashboard
 
 Visit [http://localhost:8000](http://localhost:8000).
 
@@ -63,17 +74,19 @@ Visit [http://localhost:8000](http://localhost:8000).
 | `/budgets` | Budget status with progress bars |
 | `/accounts` | Account list with computed balances |
 
-### Docker
+### Docker (dashboard only)
 
 ```bash
 docker compose up --build
 ```
 
+This runs the FastAPI server in Docker. The MCP server runs on the host (spawned by OpenClaw), sharing the same SQLite database via the mounted `./data` volume.
+
 ---
 
-## API Reference
+## API Reference (Dashboard + REST clients)
 
-All endpoints (except `/health`) require `X-API-Key` header.
+All endpoints (except `/health`) require `X-API-Key` header. These routes are used by the web dashboard and any REST clients. The AI agent does **not** use these routes — it calls MCP tools instead.
 
 ### Health
 
@@ -127,7 +140,7 @@ Transaction IDs are auto-incrementing integers (1, 2, 3, ...). Users are auto-cr
 | `transfer` | `user_id`, `amount`, `from_account_id`, `to_account_id` | |
 | `adjustment` | `user_id`, `amount` | |
 
-**Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601 with any timezone offset, e.g. `2026-02-25T05:00:00+07:00`; the backend converts to UTC before storing; defaults to current UTC time if omitted).
+**Optional:** `currency` (default IDR), `description`, `merchant`, `payment_method` (cash\|qris\|debit\|credit\|bank_transfer\|ewallet\|other), `note`, `metadata`, `effective_at` (ISO 8601 with any timezone offset; the backend converts to UTC; defaults to now if omitted).
 
 **Response** includes: `transaction` (with integer `id`), `balances`, `budget_status`, `warnings`.
 
@@ -175,25 +188,52 @@ Error codes: `VALIDATION_ERROR`, `NEEDS_CLARIFICATION`, `NOT_FOUND`, `DUPLICATE`
 
 ---
 
+## MCP Tools (AI Agent)
+
+The MCP server (`mcp_server.py`) exposes 17 tools that wrap the service layer. Each tool has typed parameters and structured return values — the AI agent never constructs HTTP requests or shell commands.
+
+| Tool | Description |
+|------|-------------|
+| `create_transaction` | Create an expense, income, transfer, or adjustment |
+| `list_transactions` | List with filters (month, category, user, account, search) |
+| `get_transaction` | Get a single transaction by ID |
+| `void_transaction` | Void (cancel) a transaction |
+| `correct_transaction` | Void original + create replacement |
+| `list_accounts` | List accounts (optionally by owner) |
+| `get_account_balances` | Computed balances per account |
+| `create_account` | Create a new account |
+| `adjust_account_balance` | Credit or debit an account directly |
+| `upsert_budget` | Set or update a monthly budget |
+| `list_budgets` | List budgets for a month |
+| `get_budget_status` | Budget usage, remaining, and warnings |
+| `get_budget_history` | Budget change audit log |
+| `get_monthly_summary` | Spending summary with breakdowns |
+| `get_metadata` | Categories, accounts, users, server time |
+| `convert_currency` | Live exchange rate conversion to IDR |
+| `health_check` | Check if backend is operational |
+
+Tool schemas are self-documenting — parameter names, types, and descriptions are embedded in the MCP tool definitions. The AI agent sees these schemas directly and calls tools with typed arguments.
+
+---
+
 ## Seeded Data
 
 On first run, the server seeds:
 
 **Users:** `fazrin` (Fazrin), `magfira` (Magfira) — additional users are auto-created on first transaction
 
-**Accounts** (per-user, prefixed with owner ID):
+**Accounts** — every known user gets all 6 account types, prefixed with their `user_id`:
 
-| ID | Name | Type | Owner |
-|----|------|------|-------|
-| `fazrin_BCA` | BCA | bank | fazrin |
-| `fazrin_JAGO` | Jago | bank | fazrin |
-| `fazrin_CASH` | Cash | cash | fazrin |
-| `fazrin_GOPAY` | GoPay | ewallet | fazrin |
-| `fazrin_OVO` | OVO | ewallet | fazrin |
-| `magfira_CBA` | CBA | bank | magfira |
-| `magfira_CASH` | Cash | cash | magfira |
+| Suffix | Name | Type |
+|--------|------|------|
+| `_BCA` | BCA | bank |
+| `_JAGO` | Jago | bank |
+| `_CBA` | CBA | bank |
+| `_CASH` | Cash | cash |
+| `_GOPAY` | GoPay | ewallet |
+| `_OVO` | OVO | ewallet |
 
-Each user's accounts are prefixed with their `user_id`. Transactions default to the user's own accounts unless specified otherwise.
+For example: `fazrin_BCA`, `fazrin_JAGO`, `magfira_CBA`, `magfira_GOPAY`, etc. (12 accounts total for 2 users). The backend auto-resolves unprefixed names (e.g. `"BCA"` → `fazrin_BCA` for user fazrin).
 
 **Categories** (parent → subcategories, use subcategory IDs when possible):
 
@@ -217,72 +257,56 @@ Budgets can only be set on **parent** categories.
 
 ## OpenClaw Integration (Discord Bot)
 
-The bot connects to Discord via [OpenClaw](https://docs.openclaw.ai) and uses the Ledger API as its backend. Users interact through natural language in Discord — the bot parses messages, calls the API, and formats responses.
+The bot connects to Discord via [OpenClaw](https://docs.openclaw.ai) and uses MCP tools to interact with the Ledger service layer directly. Users speak natural language in Discord — the bot parses messages, calls MCP tools, and formats responses.
 
 ### How It Works
 
 1. OpenClaw injects **system prompt files** (AGENTS.md, SOUL.md, etc.) into the agent's context at the start of each session.
-2. The agent sees a list of available **skills**, including `finance-api`, with a short description.
-3. When the user sends a finance command, the agent reads the `finance-api` SKILL.md to find the exact `curl` command pattern.
-4. The agent uses the `exec` tool to run `curl` with the `$FINANCE_API_KEY` env var for authentication.
-5. The agent formats the JSON response into Discord-friendly messages.
+2. OpenClaw spawns the **MCP server** (`mcp_server.py`) as a child process via stdio transport.
+3. The agent sees all 17 MCP tools with their typed schemas — parameter names, types, descriptions, and required/optional markers.
+4. When the user sends a finance message, the agent calls the appropriate MCP tool with structured arguments.
+5. The MCP tool executes the service layer function directly (no HTTP) and returns structured data.
+6. The agent formats the response into a Discord-friendly message.
 
 ### File Structure
 
 ```
 openclaw/
 ├── prompt/                    # System prompt files (copied to OpenClaw workspace root)
-│   ├── AGENTS.md              # Core instructions: how to call the API, command definitions,
-│   │                          # clarification rules, formatting, safety guardrails
+│   ├── AGENTS.md              # Behavioral rules: user_id extraction, receipt formatting,
+│   │                          # time parsing, category inference, clarification UX, safety
 │   ├── IDENTITY.md            # Bot name, persona, emoji
 │   ├── SOUL.md                # Behavioral philosophy and boundaries
-│   ├── USER.md                # User handling: auto-creation, default currency
-│   ├── TOOLS.md               # Quick-reference cheat sheet: accounts, categories,
-│   │                          # amount shorthands, payment methods
+│   ├── USER.md                # Known users, aliases, timezones, auto-creation rules
+│   ├── TOOLS.md               # Reference data: accounts, categories, amount shorthands,
+│   │                          # payment methods, transaction types
 │   ├── BOOTSTRAP.md           # First-run setup checklist and intro message
 │   └── HEARTBEAT.md           # Periodic tasks (budget threshold alerts)
 │
-└── skills/
-    └── finance-api/
-        ├── SKILL.md            # Skill definition with complete curl examples for every endpoint
-        ├── api.sh              # Shell wrapper for curl (handles base URL + auth header)
-        └── tools/              # JSON schema definitions per endpoint (reference only)
-            ├── create_transaction.json
-            ├── list_transactions.json
-            ├── get_account_balances.json
-            └── ...
+├── skills/
+│   └── finance-api/
+│       ├── SKILL.md            # Skill metadata (mcp: true) + domain rules and error codes
+│       └── tools/              # JSON schema definitions per tool (reference only)
+│           ├── create_transaction.json
+│           ├── list_transactions.json
+│           └── ...
+│
+mcp_server.py                  # MCP tool server — wraps service layer as MCP tools
 ```
 
-### System Prompt Files
+### Prompt Design
 
-OpenClaw builds a system prompt by injecting these Markdown files into the agent's context. Each file has a specific role:
+The system prompt is intentionally lean. With MCP tools, the AI agent sees typed schemas directly, so the prompts focus only on things schemas can't express:
 
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` | The main instruction set. Defines how to call the API (always `exec` with `curl`), natural language intent detection (recording, revising, balances, budgets, summaries), time parsing rules, foreign currency conversion via `/v1/convert`, clarification rules, formatting rules, and safety constraints. No slash commands — the bot understands plain language. |
-| `IDENTITY.md` | Bot name ("Ledger"), persona, and emoji. |
-| `SOUL.md` | Behavioral guide: be precise with money, casual with words, proactive but not annoying. Defines language style and hard boundaries. |
-| `USER.md` | User handling: auto-creation from Discord display names, default currency (IDR), known household members with timezones (Fazrin in Jakarta UTC+7, Magfira in Sydney UTC+11). |
-| `TOOLS.md` | Quick-reference for accounts, categories, amount shorthands (50k=50000, 1.5jt=1500000), payment methods, and transaction types. Keeps this info out of AGENTS.md to reduce prompt size. |
-| `BOOTSTRAP.md` | One-time first-run instructions. The agent introduces itself and verifies the API is online. |
-| `HEARTBEAT.md` | Periodic task definition. Checks budget status and alerts if any category exceeds 80%. |
+| File | What it covers |
+|------|----------------|
+| `AGENTS.md` | How to extract `user_id` from Discord sender context, receipt formatting, time parsing from natural language, Indonesian slang → category mapping, clarification UX, display formats, safety rules |
+| `SOUL.md` | Persona: precise with money, casual with words. Hard boundaries (never calculate, never fabricate). |
+| `USER.md` | Known household members, aliases (firrr → magfira), timezones. |
+| `TOOLS.md` | Reference data the agent needs to interpret messages: account suffixes, category tree, Indonesian amount shorthands (50k, 1jt, gopek, ceban). |
+| `SKILL.md` | Minimal — just metadata (`mcp: true`), five domain rules, and error codes. Tool parameters are self-documented via MCP schemas. |
 
-### The `finance-api` Skill
-
-The skill (`openclaw/skills/finance-api/SKILL.md`) teaches the agent how to call the Ledger API. It contains:
-
-- **Frontmatter** declaring the skill name, description, and required env vars
-- **Complete curl examples** for every API endpoint
-- **Request schemas** (required/optional fields per transaction type)
-- **Error handling guidance**
-
-Key design decisions:
-
-- **`user-invocable: false`** — The skill is NOT exposed as a Discord slash command. It's a reference document the agent reads when it needs to make API calls.
-- **Inline curl commands** — Each example includes the full `curl` command with `$FINANCE_API_KEY`. This is intentional: OpenClaw's `{baseDir}` template variable only resolves inside skill invocations, NOT when the agent reads the file with the `read` tool. Using inline curl with env vars avoids path-resolution issues.
-- **`exec` tool only** — The agent must use OpenClaw's `exec` tool to run curl. The `web_fetch` tool cannot send custom headers, so API calls through `web_fetch` fail with 401.
-
-### Setting Up OpenClaw (Local)
+### Setting Up OpenClaw
 
 **Prerequisites:** [OpenClaw CLI](https://docs.openclaw.ai) installed, Node >= 22.12.0, Discord bot token.
 
@@ -306,18 +330,24 @@ cp openclaw/prompt/*.md "$OPENCLAW_WS/"
 ```bash
 mkdir -p "$OPENCLAW_WS/skills/finance-api/tools"
 cp openclaw/skills/finance-api/SKILL.md "$OPENCLAW_WS/skills/finance-api/"
-cp openclaw/skills/finance-api/api.sh "$OPENCLAW_WS/skills/finance-api/"
-chmod +x "$OPENCLAW_WS/skills/finance-api/api.sh"
 cp openclaw/skills/finance-api/tools/*.json "$OPENCLAW_WS/skills/finance-api/tools/"
 ```
 
-4. **Set the API key:**
+4. **Configure the MCP client** in your OpenClaw agent config to spawn the MCP server:
 
-```bash
-echo 'FINANCE_API_KEY=<your-LEDGER_API_KEY-value>' >> ~/.openclaw/.env
+```json
+{
+  "mcpServers": {
+    "ledger": {
+      "command": "/path/to/ledger/.venv/bin/python",
+      "args": ["/path/to/ledger/mcp_server.py"],
+      "env": {
+        "LEDGER_DB_PATH": "/path/to/ledger/data/ledger.db"
+      }
+    }
+  }
+}
 ```
-
-Use the same value as `LEDGER_API_KEY` in the backend's `.env`.
 
 5. **Verify the skill is loaded:**
 
@@ -333,27 +363,14 @@ Look for `finance-api` with status `✓ ready` and source `openclaw-workspace`.
 openclaw gateway restart
 ```
 
-7. **Test:**
-
-```bash
-openclaw agent --session-id test --message "/balance" --json
-```
-
-### Setting Up OpenClaw (EC2 / Production)
-
-Same steps as local, plus:
-
-- Add `FINANCE_API_KEY` to `~/.openclaw/.env` on the server
-- The GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically syncs prompt and skill files, restarts the gateway, and clears Discord sessions on merge to `main`
-
 ### Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Bot says "command not found" | It's trying to run `finance-api` as a CLI binary | Verify `SKILL.md` has `user-invocable: false` and `AGENTS.md` instructs `exec` with `curl` |
-| 401 Unauthorized from API | Missing `X-API-Key` header | Bot is using `web_fetch` instead of `exec` with `curl`. Check `AGENTS.md` has the `web_fetch` prohibition. Also verify `FINANCE_API_KEY` is set in `~/.openclaw/.env` |
-| Bot can't find `api.sh` / `{baseDir}` errors | `{baseDir}` doesn't resolve in `read` tool output | Use inline curl commands in SKILL.md (current approach) instead of `{baseDir}/api.sh` references |
-| Bot asks for user_id on Discord | Not extracting sender name from Discord message | `AGENTS.md` instructs the bot to lowercase the sender's display name and use it as `user_id`. Users are auto-created on first transaction. |
+| Bot doesn't call any tools | MCP server not configured in agent | Add `mcpServers.ledger` to the agent config (see step 4 above) |
+| MCP server exits immediately | Missing dependencies | Run `pip install -r requirements.txt` in the venv that OpenClaw uses to spawn the server |
+| Bot asks for user_id | Not extracting sender name | Check `AGENTS.md` has the user_id extraction rules. Check `USER.md` has the correct aliases. |
+| `NOT_FOUND` errors for accounts | User has no accounts yet | New users are auto-created but need accounts. Use `create_account` or check seeded data. |
 | Skill not showing in `openclaw skills list` | Files not in the right location | Skill must be at `<workspace>/skills/finance-api/SKILL.md` with valid YAML frontmatter |
 
 ---
@@ -362,6 +379,7 @@ Same steps as local, plus:
 
 ```
 ledger/
+├── mcp_server.py               # MCP tool server — wraps service layer for AI agent (stdio)
 ├── app/
 │   ├── main.py                 # FastAPI entry point, lifespan, exception handlers
 │   ├── config.py               # Pydantic settings from env (LEDGER_* prefix)
@@ -380,7 +398,7 @@ ledger/
 │   │   ├── accounts.py         # Account CRUD + balances + adjust
 │   │   ├── summary.py          # GET /v1/summary/monthly
 │   │   └── dashboard.py        # Server-rendered HTML pages
-│   ├── services/
+│   ├── services/               # Business logic (shared by MCP server + FastAPI routes)
 │   │   ├── transaction_service.py
 │   │   ├── budget_service.py
 │   │   ├── account_service.py
@@ -394,12 +412,13 @@ ledger/
 │       └── login.html
 ├── alembic/                    # Database migrations
 │   └── versions/
-│       ├── 001_initial_schema.py
-│       ├── 002_category_hierarchy.py
-│       └── 003_budget_snapshots.py
 ├── openclaw/                   # OpenClaw bot configuration (see "OpenClaw Integration" above)
 │   ├── prompt/
 │   └── skills/finance-api/
+├── tests/
+│   ├── conftest.py             # Prompt regression test infrastructure (loads prompts, defines tool schemas)
+│   ├── test_bot_behavior.py    # 74 behavioral tests — validates LLM produces correct tool calls
+│   └── test_mcp_tools.py       # 51 integration tests — validates MCP tools against real DB
 ├── data/                       # SQLite database (gitignored)
 ├── .env.example
 ├── .github/workflows/deploy.yml
@@ -411,6 +430,21 @@ ledger/
 
 ---
 
+## Tests
+
+```bash
+# MCP tool integration tests (no API key needed)
+.venv/bin/python -m pytest tests/test_mcp_tools.py -v
+
+# Prompt regression tests (requires OPENAI_API_KEY in .env)
+.venv/bin/python -m pytest tests/test_bot_behavior.py -v
+```
+
+- **`test_mcp_tools.py`** (51 tests) — Calls MCP tool functions directly against an in-memory SQLite database. Covers happy paths, error handling, account ownership enforcement, voided transaction exclusion, and JSON serialization.
+- **`test_bot_behavior.py`** (74 tests) — Sends natural language messages to an LLM with the system prompt and tool schemas, then asserts that the LLM produces the correct tool calls with correct arguments. Covers user_id extraction, amount parsing, intent detection, category inference, time parsing, timezone handling, currency conversion, multi-item, revision flow, clarification, and safety.
+
+---
+
 ## Deployment
 
 ### GitHub Actions
@@ -419,10 +453,12 @@ On push to `main`, `.github/workflows/deploy.yml`:
 
 1. SSHs into the EC2 instance
 2. Pulls latest code
-3. Rebuilds and restarts the Docker container
-4. Copies prompt files and skill files to the OpenClaw workspace
-5. Restarts the OpenClaw gateway
-6. Clears Discord sessions (so the bot picks up updated prompts/skills immediately)
+3. Rebuilds and restarts the Docker container (FastAPI + dashboard)
+4. Creates/updates a Python venv on the host and installs dependencies (for the MCP server)
+5. Copies prompt files and skill files to the OpenClaw workspace
+6. Restarts the OpenClaw gateway and clears Discord sessions
+
+The MCP server runs on the host (spawned by OpenClaw via stdio), while FastAPI runs in Docker. Both share the same SQLite database through the mounted `./data` volume.
 
 ### Required GitHub Secrets
 

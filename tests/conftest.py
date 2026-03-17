@@ -1,7 +1,11 @@
 """Prompt regression test infrastructure.
 
 Loads the same prompt files OpenClaw uses, sends test messages to an LLM,
-and provides helpers to inspect the curl commands the bot would produce.
+and provides helpers to inspect the structured tool calls the bot produces.
+
+With the MCP upgrade, the bot calls typed tools (create_transaction,
+get_account_balances, etc.) instead of generating raw curl commands.
+Tests assert on tool call names and arguments directly.
 
 Requirements:
     pip install openai pytest python-dotenv
@@ -20,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -38,23 +41,286 @@ except ImportError:
 PROMPT_DIR = ROOT / "openclaw" / "prompt"
 SKILL_PATH = ROOT / "openclaw" / "skills" / "finance-api" / "SKILL.md"
 
-EXEC_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "exec",
-        "description": "Execute a shell command",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute",
-                }
+# ---------------------------------------------------------------------------
+# Tool definitions — mirror the MCP server's tools as OpenAI function-calling
+# ---------------------------------------------------------------------------
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "create_transaction",
+            "description": "Create a financial transaction (expense, income, transfer, or adjustment).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "transaction_type": {"type": "string", "enum": ["expense", "income", "transfer", "adjustment"]},
+                    "amount": {"type": "number"},
+                    "category_id": {"type": "string"},
+                    "from_account_id": {"type": "string"},
+                    "to_account_id": {"type": "string"},
+                    "description": {"type": "string"},
+                    "merchant": {"type": "string"},
+                    "payment_method": {"type": "string", "enum": ["cash", "qris", "debit", "credit", "bank_transfer", "ewallet", "other"]},
+                    "effective_at": {"type": "string", "description": "ISO 8601 naive local time"},
+                    "timezone": {"type": "string", "description": "IANA timezone name"},
+                    "note": {"type": "string"},
+                    "metadata": {"type": "object"},
+                    "currency": {"type": "string"},
+                },
+                "required": ["user_id", "transaction_type", "amount"],
             },
-            "required": ["command"],
         },
     },
-}
+    {
+        "type": "function",
+        "function": {
+            "name": "list_transactions",
+            "description": "List transactions with optional filters.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                    "user_id": {"type": "string"},
+                    "category_id": {"type": "string"},
+                    "account_id": {"type": "string"},
+                    "search": {"type": "string"},
+                    "limit": {"type": "integer"},
+                    "offset": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_transaction",
+            "description": "Get a single transaction by integer ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "txn_id": {"type": "integer"},
+                },
+                "required": ["txn_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "void_transaction",
+            "description": "Void (cancel) a transaction by integer ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "txn_id": {"type": "integer"},
+                },
+                "required": ["txn_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "correct_transaction",
+            "description": "Correct a transaction: voids original and creates replacement.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "txn_id": {"type": "integer"},
+                    "user_id": {"type": "string"},
+                    "transaction_type": {"type": "string", "enum": ["expense", "income", "transfer", "adjustment"]},
+                    "amount": {"type": "number"},
+                    "category_id": {"type": "string"},
+                    "from_account_id": {"type": "string"},
+                    "to_account_id": {"type": "string"},
+                    "description": {"type": "string"},
+                    "merchant": {"type": "string"},
+                    "payment_method": {"type": "string"},
+                    "effective_at": {"type": "string"},
+                    "timezone": {"type": "string"},
+                    "note": {"type": "string"},
+                    "metadata": {"type": "object"},
+                    "currency": {"type": "string"},
+                },
+                "required": ["txn_id", "user_id", "transaction_type", "amount"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_accounts",
+            "description": "List accounts, optionally filtered by user_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_account_balances",
+            "description": "Get current balance for each active account.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_account",
+            "description": "Create a new account.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "display_name": {"type": "string"},
+                    "type": {"type": "string", "enum": ["bank", "cash", "ewallet", "credit_card", "other"]},
+                    "owner_id": {"type": "string"},
+                    "currency": {"type": "string"},
+                },
+                "required": ["id", "display_name", "type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "adjust_account_balance",
+            "description": "Adjust an account's balance.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_id": {"type": "string"},
+                    "amount": {"type": "number"},
+                    "user_id": {"type": "string"},
+                    "note": {"type": "string"},
+                },
+                "required": ["account_id", "amount", "user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "upsert_budget",
+            "description": "Set or update a budget for a parent category.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                    "category_id": {"type": "string"},
+                    "limit_amount": {"type": "integer"},
+                    "scope_user_id": {"type": "string"},
+                },
+                "required": ["month", "category_id", "limit_amount"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_budgets",
+            "description": "List all budgets for a month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                },
+                "required": ["month"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_budget_status",
+            "description": "Get budget usage, remaining, percent, and warnings.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_budget_history",
+            "description": "Get budget change history for a month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["month"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_monthly_summary",
+            "description": "Get spending summary for a month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                    "user_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_metadata",
+            "description": "Get categories, accounts, users, payment methods, transaction types, and server time.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "convert_currency",
+            "description": "Convert a foreign currency amount to IDR using live exchange rates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount": {"type": "number"},
+                    "from_currency": {"type": "string"},
+                    "to_currency": {"type": "string"},
+                },
+                "required": ["amount", "from_currency"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "health_check",
+            "description": "Check if the backend is operational.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +335,7 @@ def _record_response(input_message: str, resp: "BotResponse") -> None:
     """Store the latest ask/ask_multi call for the current test."""
     _current_response["input"] = input_message
     _current_response["text"] = resp.content
-    _current_response["curls"] = resp.curls
-    _current_response["bodies"] = resp.curl_bodies()
-    _current_response["all_commands"] = resp.all_commands
+    _current_response["tool_calls"] = resp.tool_calls
 
 
 @pytest.fixture(autouse=True)
@@ -92,8 +356,7 @@ def pytest_runtest_makereport(item, call):
         "input": _current_response.get("input", ""),
         "output": {
             "text": _current_response.get("text", ""),
-            "curls": _current_response.get("curls", []),
-            "bodies": _current_response.get("bodies", []),
+            "tool_calls": _current_response.get("tool_calls", []),
         },
         "assertion_error": "",
     }
@@ -121,7 +384,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     lines: list[str] = []
     lines.append(f"{'=' * 80}")
-    lines.append(f"Ledger Bot — Prompt Regression Test Results")
+    lines.append("Ledger Bot — Prompt Regression Test Results")
     lines.append(f"{'=' * 80}")
     lines.append(f"Timestamp : {timestamp}")
     lines.append(f"Model     : {model}")
@@ -136,16 +399,13 @@ def pytest_sessionfinish(session, exitstatus):
         lines.append(f"  Input: {entry['input'] or '(n/a)'}")
 
         output = entry["output"]
-        if output["curls"]:
-            lines.append(f"  Curls:")
-            for curl in output["curls"]:
-                short = curl[:200] + "..." if len(curl) > 200 else curl
-                lines.append(f"    {short}")
-
-        if output["bodies"]:
-            lines.append(f"  Bodies:")
-            for body in output["bodies"]:
-                lines.append(f"    {json.dumps(body, indent=None, ensure_ascii=False)}")
+        if output["tool_calls"]:
+            lines.append("  Tool calls:")
+            for tc in output["tool_calls"]:
+                args_short = json.dumps(tc["arguments"], ensure_ascii=False)
+                if len(args_short) > 200:
+                    args_short = args_short[:200] + "..."
+                lines.append(f"    {tc['name']}({args_short})")
 
         if output["text"]:
             text_short = output["text"][:300]
@@ -162,7 +422,7 @@ def pytest_sessionfinish(session, exitstatus):
     lines.append(f"{'=' * 80}")
     lines.append(f"Summary: {passed}/{total} passed")
     if failed:
-        lines.append(f"Failed tests:")
+        lines.append("Failed tests:")
         for entry in _log_entries:
             if entry["result"] == "FAIL":
                 lines.append(f"  ❌ {entry['test']}")
@@ -239,48 +499,29 @@ class BotResponse:
     def text(self) -> str:
         return self.content
 
-    @property
-    def curls(self) -> list[str]:
-        """All curl commands the bot tried to run via exec."""
-        return [tc["command"] for tc in self.tool_calls if "curl" in tc.get("command", "")]
+    def has_tool_call(self, name: str) -> bool:
+        """Check if any tool call matches the given name."""
+        return any(tc["name"] == name for tc in self.tool_calls)
 
-    @property
-    def all_commands(self) -> list[str]:
-        return [tc["command"] for tc in self.tool_calls]
-
-    def curl_bodies(self) -> list[dict]:
-        """Parse JSON bodies from all curl -d '...' commands."""
-        bodies = []
-        for cmd in self.curls:
-            body = parse_curl_body(cmd)
-            if body is not None:
-                bodies.append(body)
-        return bodies
-
-    def has_curl(self, method: str, path: str) -> bool:
-        """Check if any curl call uses the given method + URL path."""
-        for cmd in self.curls:
-            if f"-X {method}" in cmd and path in cmd:
-                return True
-        return False
-
-    def find_curl(self, method: str, path: str) -> str | None:
-        """Return the first curl command matching method + path, or None."""
-        for cmd in self.curls:
-            if f"-X {method}" in cmd and path in cmd:
-                return cmd
+    def find_tool_call(self, name: str) -> dict | None:
+        """Return the arguments of the first tool call matching name, or None."""
+        for tc in self.tool_calls:
+            if tc["name"] == name:
+                return tc["arguments"]
         return None
 
-    def find_body(self, method: str, path: str) -> dict | None:
-        """Return the parsed JSON body of the first matching curl."""
-        cmd = self.find_curl(method, path)
-        if cmd:
-            return parse_curl_body(cmd)
-        return None
+    def find_all_tool_calls(self, name: str) -> list[dict]:
+        """Return arguments of all tool calls matching name."""
+        return [tc["arguments"] for tc in self.tool_calls if tc["name"] == name]
+
+    @property
+    def tool_names(self) -> list[str]:
+        """Names of all tools called, in order."""
+        return [tc["name"] for tc in self.tool_calls]
 
 
 def ask(client, system_prompt: str, message: str, model: str | None = None) -> BotResponse:
-    """Send a single message to the LLM with system prompt + exec tool.
+    """Send a single message to the LLM with system prompt + MCP tools.
 
     Returns a BotResponse with parsed tool calls.
     """
@@ -292,7 +533,7 @@ def ask(client, system_prompt: str, message: str, model: str | None = None) -> B
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message},
         ],
-        tools=[EXEC_TOOL],
+        tools=TOOLS,
         temperature=0,
     )
 
@@ -302,10 +543,7 @@ def ask(client, system_prompt: str, message: str, model: str | None = None) -> B
     if choice.message.tool_calls:
         for tc in choice.message.tool_calls:
             args = json.loads(tc.function.arguments)
-            tool_calls.append({
-                "name": tc.function.name,
-                "command": args.get("command", ""),
-            })
+            tool_calls.append({"name": tc.function.name, "arguments": args})
 
     resp = BotResponse(
         content=choice.message.content or "",
@@ -326,8 +564,9 @@ def ask_multi(
 ) -> BotResponse:
     """Multi-turn: send message, feed fake tool results, collect all tool calls.
 
-    fake_responses maps a URL path fragment to a fake JSON response string.
-    For example: {"/v1/meta": '{"server_time": "..."}', "/v1/convert": '{"result": 298792}'}
+    fake_responses maps a **tool name** to a fake JSON response string.
+    For example: {"get_metadata": '{"server_time": "..."}',
+                  "convert_currency": '{"result": 298792}'}
 
     All tool calls across all turns are accumulated into the returned BotResponse.
     """
@@ -345,7 +584,7 @@ def ask_multi(
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            tools=[EXEC_TOOL],
+            tools=TOOLS,
             temperature=0,
         )
 
@@ -360,13 +599,12 @@ def ask_multi(
 
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments)
-            command = args.get("command", "")
-            all_tool_calls.append({"name": tc.function.name, "command": command})
+            all_tool_calls.append({"name": tc.function.name, "arguments": args})
 
             tool_result = '{"status": "ok"}'
             if fake_responses:
-                for path_fragment, fake_resp in fake_responses.items():
-                    if path_fragment in command:
+                for tool_name, fake_resp in fake_responses.items():
+                    if tool_name == tc.function.name:
                         tool_result = fake_resp
                         break
 
@@ -383,34 +621,3 @@ def ask_multi(
     )
     _record_response(message, resp)
     return resp
-
-
-# ---------------------------------------------------------------------------
-# Parsing helpers
-# ---------------------------------------------------------------------------
-
-
-def parse_curl_body(curl_cmd: str) -> dict | None:
-    """Extract the JSON body from a curl -d '...' or -d "..." command."""
-    for pattern in [
-        r"-d\s+'(.*?)'",
-        r'-d\s+"(.*?)"',
-        r"-d\s+(\{.*\})",
-    ]:
-        match = re.search(pattern, curl_cmd, re.DOTALL)
-        if match:
-            raw = match.group(1)
-            raw = raw.replace('\\"', '"')
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-    return None
-
-
-def curl_url_path(curl_cmd: str) -> str | None:
-    """Extract the URL path from a curl command."""
-    match = re.search(r'"http://[^/]+(\/[^"]*)"', curl_cmd)
-    if match:
-        return match.group(1)
-    return None
