@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# CLI wrapper for the Ledger finance tool server.
+# Usage: ledger <tool_name> ['<json_args>']
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/mcp_server.py" "$@"

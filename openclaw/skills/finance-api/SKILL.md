@@ -2,12 +2,25 @@
 name: finance-api
 description: Household finance API — log transactions, manage budgets, check balances, and get summaries.
 user-invocable: false
-metadata: {"openclaw":{"requires":{"env":["FINANCE_API_KEY"]},"primaryEnv":"FINANCE_API_KEY","mcp":true}}
+metadata: {"openclaw":{"requires":{"env":["FINANCE_API_KEY"]},"primaryEnv":"FINANCE_API_KEY"}}
 ---
 
-# Finance API — MCP Tools
+# Finance API — CLI Tools
 
-All tools are self-documented via their MCP schemas (parameter names, types, descriptions, and required fields). Call them directly with typed arguments.
+Call tools via `exec`. Pass arguments as a JSON object:
+
+```
+exec: ledger <tool_name> '<json_args>'
+```
+
+Examples:
+- `exec: ledger health_check`
+- `exec: ledger get_account_balances '{"user_id":"fazrin"}'`
+- `exec: ledger create_transaction '{"user_id":"fazrin","transaction_type":"expense","amount":50000,"category_id":"fuel","from_account_id":"Jago"}'`
+
+The tool prints JSON to stdout. Parse the result before replying.
+
+Tool parameters are defined in the `tools/` directory (names, types, descriptions, required fields).
 
 ## Domain Rules
 

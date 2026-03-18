@@ -10,7 +10,12 @@
       },
       "transaction_type": {
         "type": "string",
-        "enum": ["expense", "income", "transfer", "adjustment"],
+        "enum": [
+          "expense",
+          "income",
+          "transfer",
+          "adjustment"
+        ],
         "description": "Type of transaction."
       },
       "amount": {
@@ -35,7 +40,15 @@
       },
       "payment_method": {
         "type": "string",
-        "enum": ["cash", "qris", "debit", "credit", "bank_transfer", "ewallet", "other"],
+        "enum": [
+          "cash",
+          "qris",
+          "debit",
+          "credit",
+          "bank_transfer",
+          "ewallet",
+          "other"
+        ],
         "description": "How the payment was made."
       },
       "from_account_id": {
@@ -59,13 +72,10 @@
         "description": "ISO 8601 datetime of when the transaction happened. Defaults to server time if omitted."
       }
     },
-    "required": ["user_id", "transaction_type", "amount"]
-  },
-  "backend": {
-    "method": "POST",
-    "url": "http://127.0.0.1:8000/v1/transactions",
-    "headers": {
-      "X-API-Key": "${FINANCE_API_KEY}"
-    }
+    "required": [
+      "user_id",
+      "transaction_type",
+      "amount"
+    ]
   }
 }

@@ -21,13 +21,10 @@
         "description": "Reason for the adjustment (e.g. 'Initial balance', 'Reconciliation')."
       }
     },
-    "required": ["account_id", "amount", "user_id"]
-  },
-  "backend": {
-    "method": "POST",
-    "url": "http://127.0.0.1:8000/v1/accounts/{account_id}/adjust",
-    "headers": {
-      "X-API-Key": "${FINANCE_API_KEY}"
-    }
+    "required": [
+      "account_id",
+      "amount",
+      "user_id"
+    ]
   }
 }

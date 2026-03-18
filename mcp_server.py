@@ -1,18 +1,22 @@
-"""MCP tool server for the Ledger finance API.
+"""Ledger finance tool server.
 
 Exposes the same operations as the FastAPI REST endpoints, but as
-structured MCP tools that an AI agent can invoke directly.  Each tool
-wraps the service layer — no HTTP round-trip needed.
+structured tool functions that an AI agent can invoke directly.  Each
+tool wraps the service layer — no HTTP round-trip needed.
 
-Run:
-    fastmcp run mcp_server.py
+CLI mode (used by OpenClaw via exec):
+    python mcp_server.py <tool_name> ['<json_args>']
+    python mcp_server.py health_check
+    python mcp_server.py create_transaction '{"user_id":"fazrin","amount":50000,...}'
 
-Or with stdio transport (for OpenClaw / Claude Desktop):
-    python mcp_server.py
+MCP mode (for future use when OpenClaw adds native MCP support):
+    python mcp_server.py --mcp
 """
 
 from __future__ import annotations
 
+import json
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -600,9 +604,68 @@ def health_check() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# CLI registry & entry point
 # ---------------------------------------------------------------------------
+
+_TOOL_REGISTRY: dict[str, Any] = {
+    "create_transaction": create_transaction,
+    "list_transactions": list_transactions,
+    "get_transaction": get_transaction,
+    "void_transaction": void_transaction,
+    "correct_transaction": correct_transaction,
+    "list_accounts": list_accounts,
+    "get_account_balances": get_account_balances,
+    "create_account": create_account,
+    "adjust_account_balance": adjust_account_balance,
+    "upsert_budget": upsert_budget,
+    "list_budgets": list_budgets,
+    "get_budget_status": get_budget_status,
+    "get_budget_history": get_budget_history,
+    "get_monthly_summary": get_monthly_summary,
+    "get_metadata": get_metadata,
+    "convert_currency": convert_currency,
+    "health_check": health_check,
+}
+
+
+def _cli_main() -> None:
+    """CLI entrypoint: mcp_server.py <tool_name> [json_args]"""
+    tool_name = sys.argv[1]
+
+    if tool_name not in _TOOL_REGISTRY:
+        print(json.dumps(_error_dict(
+            "UNKNOWN_TOOL",
+            f"Unknown tool: {tool_name}. "
+            f"Available: {', '.join(sorted(_TOOL_REGISTRY))}",
+        )))
+        sys.exit(1)
+
+    kwargs: dict[str, Any] = {}
+    if len(sys.argv) > 2:
+        try:
+            kwargs = json.loads(sys.argv[2])
+        except json.JSONDecodeError as exc:
+            print(json.dumps(_error_dict("PARSE_ERROR", f"Invalid JSON: {exc}")))
+            sys.exit(1)
+
+    try:
+        result = _TOOL_REGISTRY[tool_name](**kwargs)
+    except TypeError as exc:
+        print(json.dumps(_error_dict("ARG_ERROR", str(exc))))
+        sys.exit(1)
+    except Exception as exc:
+        print(json.dumps(_error_dict("INTERNAL_ERROR", str(exc))))
+        sys.exit(1)
+
+    print(json.dumps(result, ensure_ascii=False, default=str))
+
 
 if __name__ == "__main__":
     _init_database()
-    mcp.run(transport="stdio")
+    if len(sys.argv) > 1 and sys.argv[1] == "--mcp":
+        mcp.run(transport="stdio")
+    elif len(sys.argv) > 1:
+        _cli_main()
+    else:
+        print(json.dumps({"tools": sorted(_TOOL_REGISTRY.keys())}))
+        sys.exit(0)

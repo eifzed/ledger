@@ -24,13 +24,15 @@ jobs:
             docker compose down
             docker compose up -d --build
 
-            # --- MCP server (host venv) — serves OpenClaw ---
-            # The MCP server runs on the host, spawned by OpenClaw via stdio.
+            # --- Ledger CLI (host venv) — serves OpenClaw via exec ---
+            # The CLI tool runs on the host, called by OpenClaw's exec tool.
             # It shares the same SQLite database as the Docker container.
             if [ ! -d .venv ]; then
               python3 -m venv .venv
             fi
             .venv/bin/pip install -q -r requirements.txt
+            chmod +x ledger
+            sudo ln -sf "${{ secrets.APP_DIR }}/ledger" /usr/local/bin/ledger
 
             # --- Sync OpenClaw prompt files and skills ---
             OPENCLAW_WS=${{ secrets.OPENCLAW_WORKSPACE }}

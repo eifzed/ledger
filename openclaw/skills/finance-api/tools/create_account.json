@@ -14,7 +14,13 @@
       },
       "type": {
         "type": "string",
-        "enum": ["bank", "cash", "ewallet", "credit_card", "other"],
+        "enum": [
+          "bank",
+          "cash",
+          "ewallet",
+          "credit_card",
+          "other"
+        ],
         "description": "Type of account."
       },
       "currency": {
@@ -22,13 +28,10 @@
         "description": "Currency code. Defaults to 'IDR'."
       }
     },
-    "required": ["id", "display_name", "type"]
-  },
-  "backend": {
-    "method": "POST",
-    "url": "http://127.0.0.1:8000/v1/accounts",
-    "headers": {
-      "X-API-Key": "${FINANCE_API_KEY}"
-    }
+    "required": [
+      "id",
+      "display_name",
+      "type"
+    ]
   }
 }

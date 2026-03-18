@@ -1,0 +1,22 @@
+{
+  "name": "convert_currency",
+  "description": "Convert a foreign currency amount to IDR using live exchange rates. Use the 'result' field directly as the IDR amount — never calculate conversions manually.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "amount": {
+        "type": "number",
+        "description": "Amount to convert."
+      },
+      "from_currency": {
+        "type": "string",
+        "description": "Source currency code (e.g. 'AUD', 'USD', 'SGD')."
+      },
+      "to_currency": {
+        "type": "string",
+        "description": "Target currency code. Defaults to 'IDR'."
+      }
+    },
+    "required": ["amount", "from_currency"]
+  }
+}

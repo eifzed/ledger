@@ -9,13 +9,8 @@
         "description": "Auto-incrementing integer ID of the transaction to retrieve (e.g. 1, 2, 42)."
       }
     },
-    "required": ["txn_id"]
-  },
-  "backend": {
-    "method": "GET",
-    "url": "http://127.0.0.1:8000/v1/transactions/{txn_id}",
-    "headers": {
-      "X-API-Key": "${FINANCE_API_KEY}"
-    }
+    "required": [
+      "txn_id"
+    ]
   }
 }
